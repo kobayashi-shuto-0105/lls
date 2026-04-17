@@ -1,6 +1,10 @@
-# lls
+<p align="center">
+	<img src=".github/assets/lls_logo.png" alt="lls logo" width="240">
+</p>
 
-**`lls` = `ls` for LLMs**
+<h1 align="center">lls</h1>
+
+<p align="center"><strong><code>lls</code> = <code>ls</code> for LLMs</strong></p>
 
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  
 通常の `ls` が「何があるか」を並べるのに対して、`lls` は「何が重要か」「何を後回しにしてよいか」「次にどこを見るべきか」を返すことを目指します。
