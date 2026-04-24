@@ -6,6 +6,11 @@
 
 <p align="center"><strong><code>lls</code> = <code>ls</code> for LLMs</strong></p>
 
+<p align="center">
+  <a href="https://github.com/kobayashi-shuto-0105/lls/actions/workflows/build.yaml"><img src="https://github.com/kobayashi-shuto-0105/lls/actions/workflows/build.yaml/badge.svg" alt="build"></a>
+  <a href="https://coveralls.io/github/kobayashi-shuto-0105/lls?branch=main"><img src="https://coveralls.io/repos/github/kobayashi-shuto-0105/lls/badge.svg?branch=main" alt="Coverage Status"></a>
+</p>
+
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  
 通常の `ls` が「何があるか」を並べるのに対して、`lls` は「何が重要か」「何を後回しにしてよいか」「次にどこを見るべきか」を返すことを目指します。
 
