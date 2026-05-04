@@ -1,0 +1,176 @@
+name: publish
+on:
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    # この workflow は「リリース用ブランチ → main への PR が merge された瞬間」にだけ動かしたい。
+    #
+    # - `on.pull_request.types: [closed]` は PR がクローズされたイベント（merge も含む）で発火する。
+    # - その中でも「merge された」ものだけを `github.event.pull_request.merged == true` で絞り込む。
+    # - さらに「リリース用ブランチ」だけを `startsWith(github.head_ref, 'releases/v')` で絞り込む。
+    #
+    # つまり、通常の feature ブランチ PR が merge されても publish は走らない。
+    if: startsWith(github.head_ref, 'releases/v') && github.event.pull_request.merged == true
+    permissions:
+      # この workflow 内で「タグ作成・push」「GitHub Release の作成/編集」「Release へのアセット upload」をするため、
+      # contents への write 権限が必要。
+      contents: write
+    outputs:
+      # setup で計算した値（タグ名・アプリ名）を後続 job へ渡すための outputs。
+      tag: ${{ steps.vars.outputs.tag }}
+      appname: ${{ steps.vars.outputs.appname }}
+
+    steps:
+      - name: Checkout
+        # リリース対象は main の内容にしたいので ref は main 固定にしている。
+        # fetch-depth: 0 は全履歴を取る設定（ツール側で履歴情報が必要な場合に備える）。
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # Fetch all history for .GitInfo and .Lastmod
+
+      - name: Git Tag name
+        id: vars
+        run: |
+          # 後から参照するために、タグ名とアプリケーション名を出力しておく。
+          # タグ名は、ブランチ名から 'releases/v' を取り除いたもの。
+          # アプリケーション名は、リポジトリ名からオーナー名を取り除いたもの。
+          # $GITHUB_OUTPUT に出力することで、後続のジョブから参照できるようになる。
+          #
+          # 例:
+          # - head_ref: "releases/v0.1.0" → tag: "0.1.0"（この後 v を付けて "v0.1.0" を作る）
+          # - repository: "owner/lls" → appname: "lls"
+          echo "tag=${GITHUB_HEAD_REF##*/v}" >> $GITHUB_OUTPUT
+          echo "appname=${GITHUB_REPOSITORY#*/}" >> $GITHUB_OUTPUT
+
+      - name: Set git identity
+        run: |
+          # git tag を push するので、git のユーザ名とメールアドレスを設定しておく。
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and Push tag
+        run: |
+          # タグを作成して、リモートに push する。
+          # このタグが後続の `gh release create --verify-tag` の検証対象になる。
+          git tag v${{ steps.vars.outputs.tag }}
+          git push origin v${{ steps.vars.outputs.tag }}
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh コマンドを使って、リリースを作成する。
+          # draft として作成する。後続のジョブで、ドラフトを false にする。
+          #
+          # draft で作る理由:
+          # - ビルド（複数 OS/arch）がすべて成功する前に「正式リリース」として公開したくないため。
+          gh release create v${{ steps.vars.outputs.tag }} --verify-tag --generate-notes --title "Release v${{ steps.vars.outputs.tag }}" --draft
+
+  publish:
+    runs-on: ${{ matrix.os }}
+    needs: setup
+    permissions:
+      # Release へアセット upload（contents write）を行うため。
+      contents: write
+    strategy:
+      matrix:
+        include:
+          # OS/CPU アーキテクチャごとにバイナリを作って、Release のアセットとして配布する。
+          # `target` は Rust のターゲット triple（クロスコンパイル先）。
+          # `architecture` と `os_name` は配布ファイル名（ASSET_NAME）のための表示用。
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            architecture: arm64
+            os_name: linux
+            artifact_name: ${{ needs.setup.outputs.appname }}
+            ext: ""
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            architecture: amd64
+            os_name: linux
+            artifact_name: ${{ needs.setup.outputs.appname }}
+            ext: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            architecture: arm64
+            os_name: darwin
+            artifact_name: ${{ needs.setup.outputs.appname }}
+            ext: ""
+          - os: macos-latest
+            architecture: amd64
+            os_name: darwin
+            target: x86_64-apple-darwin
+            artifact_name: ${{ needs.setup.outputs.appname }}
+            ext: ""
+    outputs:
+      # finalize job で draft を解除する対象タグを参照するために、setup の tag を publish の outputs として再公開する。
+      tag: ${{ needs.setup.outputs.tag }}
+    steps:
+      - name: Setup Zig
+        # `cargo-zigbuild` は Zig を使ってクロスコンパイルする。
+        # 特に Linux 向けに glibc 周りなどを含めてビルドしやすくする狙いがある。
+        uses: mlugg/setup-zig@v2
+
+      - name: Checkout
+        # アセットは main の内容から作る（setup と同じ）。
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # Fetch all history for .GitInfo and .Lastmod
+
+      - name: build
+        run: |
+          # ここでは毎回 stable を使う前提。
+          # - CI で同じ結果を得たいなら `rust-toolchain.toml` などで固定する設計もありえる。
+          rustup update stable
+          rustup target add ${{ matrix.target }}
+          cargo install cargo-zigbuild
+          # zigbuild を使って、クロスコンパイルする。
+          cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Create distribution files.
+        run: |
+          # 配布用のファイルを作成する。
+          # ASSET_NAME は「アプリ名-バージョン_アーキテクチャ_OS」の形にして、配布物を見分けやすくする。
+          ASSET_NAME=${{ needs.setup.outputs.appname }}-${{ needs.setup.outputs.tag}}_${{ matrix.architecture }}_${{ matrix.os_name }}
+          mkdir -p dist/$ASSET_NAME
+          # バイナリ本体 + README/LICENSE を同梱して tar.gz にする。
+          cp target/${{ matrix.target }}/release/${{ needs.setup.outputs.appname }}${{ matrix.ext }} dist/$ASSET_NAME/
+          cp README.md LICENSE dist/$ASSET_NAME/
+          tar cvfz dist/${ASSET_NAME}.tar.gz -C dist $ASSET_NAME
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh コマンドを使って、リリースにアセットをアップロードする。
+          # この時点では Release は draft なので、外部からはまだ見えない（想定）。
+          ASSET_NAME=${{ needs.setup.outputs.appname }}-${{ needs.setup.outputs.tag}}_${{ matrix.architecture }}_${{ matrix.os_name }}
+          gh release upload v${{ needs.setup.outputs.tag }} dist/${ASSET_NAME}.tar.gz
+
+  finalize:
+    runs-on: ubuntu-latest
+    permissions:
+      # Release の draft 状態を変更（edit）するため contents write が必要。
+      contents: write
+    needs: publish # publish ジョブが完了した後に実行される。
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # Fetch all history for .GitInfo and .Lastmod
+
+      - name: Finalize release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh コマンドを使って、ドラフトを解除して正式公開する。
+          # 「ビルドとアセット upload がすべて成功した後」にだけ公開したいので、最後にまとめて draft=false にする。
+          gh release edit v${{ needs.publish.outputs.tag }} --draft=false

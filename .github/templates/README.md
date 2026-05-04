@@ -14,7 +14,9 @@
     - `.github/scripts/update_version.sh` が README 内のバージョン表記を自動更新できるようにするためのものです。
     - このリポジトリでは `${VERSION}` というプレースホルダを置換して README を生成する想定です。
   -->
-  <a href="https://github.com/kobayashi-shuto-0105/lls/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/Version-0.1.0-blue.svg" alt="Version"></a>
+  <a href="https://github.com/kobayashi-shuto-0105/lls/releases/tag/v${VERSION}">
+    <img src="https://img.shields.io/badge/Version-${VERSION}-blue.svg" alt="Version">
+  </a>
 </p>
 
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  

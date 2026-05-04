@@ -1,0 +1,61 @@
+name: update version
+on:
+  push:
+    branches:
+      - releases/v*
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Tag Name
+        id: vars
+        run: |
+          # この workflow は「releases/vX.Y.Z ブランチに push されたら」動く。
+          #
+          # 目的:
+          # - リリース用ブランチ名からバージョン（X.Y.Z）を取り出す
+          # - `Cargo.toml` と `README.md` のバージョン表記を揃える（後述の `update_version.sh`）
+          #
+          # NOTE:
+          # - `GITHUB_REF` は refs/heads/<branch> 形式（例: refs/heads/releases/v0.1.0）
+          # - `GITHUB_OUTPUT` に出すと、後続 step で `${{ steps.vars.outputs.* }}` として参照できる
+          echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          # refs/heads/releases/v0.1.0 → 0.1.0 を取り出す（`v` は後で付け直す）
+          echo "tag=${GITHUB_REF##*/v}" >> $GITHUB_OUTPUT
+
+      - name: Checkout
+        # releases/v* ブランチ上で README/Cargo.toml を更新してコミットし、同じブランチへ push するので、
+        # checkout もそのブランチ（`branch`）にする。
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.vars.outputs.branch }}
+          fetch-depth: 0
+
+      - name: Initialize
+        run: |
+          # この job がコミットを作って push するため、Git の author 情報を設定する。
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "action@github.com"
+
+          # submodule を使っている場合、checkout 直後は submodule が未初期化のことがある。
+          # 依存しているならここで確実に揃える（このリポジトリで不要なら将来的に削除可能）。
+          auth_header="$(git config --local --get http.https://github.com/.extraheader)"
+          git submodule sync --recursive
+          git -c "http.extraheader=$auth_header" -c protocol.version=2 submodule update --init --force --recursive --depth=1
+
+      - name: update version
+        id: update_version
+        run: |
+          # バージョン文字列の更新は、シェルスクリプト側に寄せておく（YAML を肥大化させないため）。
+          sh .github/scripts/update_version.sh ${{ steps.vars.outputs.tag }}
+
+          # 変更が無い場合は commit が失敗するので、workflow を落とさないよう `|| true` にしている。
+          # ただし、意図せず更新が入らなかったケースも成功扱いになる点には注意。
+          git commit -a -m "update version to ${{ steps.vars.outputs.tag }}" || true
+
+      - name: Push branch
+        # GITHUB_TOKEN で同じブランチに push する（release ブランチを常に最新の version 表記に揃える）。
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.vars.outputs.branch }}
