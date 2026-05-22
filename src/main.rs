@@ -73,11 +73,19 @@ fn run() -> Result<(), error::LlsError> {
         );
         println!("{json}");
     } else {
-        // Build human-readable output
-        let warnings: Vec<output::Warning> = scanner_warnings
+        // Build human-readable output with warnings
+        let mut warnings: Vec<output::Warning> = scanner_warnings
             .into_iter()
             .map(|(path, msg)| output::Warning { path, message: msg })
             .collect();
+        for entry in &classified {
+            if entry.sensitive {
+                warnings.push(output::Warning {
+                    path: entry.path.clone(),
+                    message: "秘密情報候補を検出したため、明示的に必要な場合を除き内容を読まないこと".into(),
+                });
+            }
+        }
         let human = output::format_human(
             &args.path,
             &project_type,
