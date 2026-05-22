@@ -57,13 +57,7 @@ pub fn scan(
     let mut entries = Vec::new();
     let mut warnings = Vec::new();
 
-    // Add the target itself if depth >= 0
-    if max_depth > 0 {
-        let dir_meta = entry_from_path(target, target)?;
-        entries.push(dir_meta);
-    }
-
-    // Walk directory
+    // Walk directory from depth 0
     walk_dir(target, target, 0, max_depth, &mut entries, &mut warnings);
 
     Ok((entries, warnings))

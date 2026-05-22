@@ -15,26 +15,18 @@ pub fn detect(entries: &[ClassifiedEntry]) -> ProjectType {
 
     // Check for manifest files
     let has_cargo = has("Cargo.toml");
-    let has_main_rs = has("main.rs") || names.iter().any(|n| n.ends_with(".rs"));
-    let has_lib_rs = has("lib.rs");
+    let has_src_dir = names.contains(&"src") || paths.contains(&"src");
     let has_package_json = has("package.json");
     let has_pyproject = has("pyproject.toml");
     let has_setup_py = has("setup.py");
     let has_go_mod = has("go.mod");
 
     if has_cargo {
-        if has_lib_rs {
-            return ProjectType {
-                name: "rust_library".into(),
-                confidence: 0.95,
-                evidence: vec!["Cargo.toml".into(), "src/lib.rs".into()],
-            };
-        }
-        if has_main_rs {
+        if has_src_dir {
             return ProjectType {
                 name: "rust_cli".into(),
-                confidence: 0.95,
-                evidence: vec!["Cargo.toml".into(), "src/main.rs".into()],
+                confidence: 0.9,
+                evidence: vec!["Cargo.toml".into(), "src/".into()],
             };
         }
         return ProjectType {
@@ -118,10 +110,10 @@ mod tests {
 
     #[test]
     fn test_rust_cli_detection() {
-        let entries = vec![entry("Cargo.toml"), entry("src/main.rs")];
+        let entries = vec![entry("Cargo.toml"), entry("src")];
         let pt = detect(&entries);
         assert_eq!(pt.name, "rust_cli");
-        assert!(pt.confidence > 0.9);
+        assert!(pt.confidence > 0.8);
     }
 
     #[test]
