@@ -122,14 +122,19 @@ fn walk_dir(
 }
 
 fn entry_from_path(base: &Path, path: &Path) -> Result<EntryMeta, LlsError> {
-    let rel = path
-        .strip_prefix(base)
-        .unwrap_or(path);
-    let rel_str = rel.display().to_string();
     let name = path
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| rel_str.clone());
+        .unwrap_or_else(|| path.display().to_string());
+
+    let rel = if base == path {
+        name.clone()
+    } else {
+        path
+            .strip_prefix(base)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| name.clone())
+    };
 
     let metadata = path.metadata().map_err(|e| {
         if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -163,7 +168,7 @@ fn entry_from_path(base: &Path, path: &Path) -> Result<EntryMeta, LlsError> {
 
     Ok(EntryMeta {
         name,
-        path: rel_str,
+        path: rel,
         entry_type,
         size_bytes,
         is_text,
