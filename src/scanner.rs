@@ -14,6 +14,7 @@ pub struct EntryMeta {
     pub size_bytes: Option<u64>,
     pub is_text: bool,
     pub is_binary: bool,
+    pub is_broken_symlink: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -104,6 +105,12 @@ fn walk_dir(
         let path = entry.path();
         match entry_from_path(base, &path) {
             Ok(meta) => {
+                if meta.is_broken_symlink {
+                    warnings.push((
+                        meta.path.clone(),
+                        format!("壊れたシンボリックリンク: {}", meta.name),
+                    ));
+                }
                 if meta.entry_type == EntryType::Directory {
                     entries.push(meta);
                     walk_dir(base, &path, current_depth + 1, max_depth, entries, warnings);
@@ -136,13 +143,23 @@ fn entry_from_path(base: &Path, path: &Path) -> Result<EntryMeta, LlsError> {
             .unwrap_or_else(|_| name.clone())
     };
 
-    let metadata = path.metadata().map_err(|e| {
+    // Check for broken symlink: use symlink_metadata to detect symlinks
+    let sym_meta = path.symlink_metadata().map_err(|e| {
         if e.kind() == std::io::ErrorKind::PermissionDenied {
             LlsError::PermissionDenied(path.display().to_string())
         } else {
             LlsError::Io(e)
         }
     })?;
+    let is_symlink = sym_meta.is_symlink();
+    let is_broken_symlink = is_symlink && path.metadata().is_err();
+
+    let metadata = if is_symlink {
+        // For symlinks, try to get target metadata
+        path.metadata().unwrap_or(sym_meta)
+    } else {
+        sym_meta
+    };
 
     let entry_type = if metadata.is_symlink() {
         EntryType::Symlink
@@ -173,6 +190,7 @@ fn entry_from_path(base: &Path, path: &Path) -> Result<EntryMeta, LlsError> {
         size_bytes,
         is_text,
         is_binary,
+        is_broken_symlink,
     })
 }
 

@@ -298,6 +298,7 @@ mod tests {
             size_bytes: Some(100),
             is_text,
             is_binary,
+            is_broken_symlink: false,
         }
     }
 

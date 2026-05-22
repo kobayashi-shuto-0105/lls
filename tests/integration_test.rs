@@ -20,7 +20,7 @@ fn fixture_path(name: &str) -> String {
 #[test]
 fn test_rust_cli_project_human_output() {
     let path = fixture_path("rust_cli");
-    let (stdout, stderr, code) = run_lls(&[&path]);
+    let (stdout, stderr, code) = run_lls(&["--depth", "2", &path]);
 
     assert_eq!(code, 0, "stderr: {stderr}");
     assert!(stdout.contains("rust_cli"), "Should detect rust_cli project type");
@@ -36,7 +36,7 @@ fn test_rust_cli_project_human_output() {
 #[test]
 fn test_rust_cli_project_json_output() {
     let path = fixture_path("rust_cli");
-    let (stdout, stderr, code) = run_lls(&["--json", &path]);
+    let (stdout, stderr, code) = run_lls(&["--json", "--depth", "2", &path]);
 
     assert_eq!(code, 0, "stderr: {stderr}");
 
@@ -142,8 +142,8 @@ fn test_depth_control() {
 #[test]
 fn test_compact_json() {
     let path = fixture_path("rust_cli");
-    let (pretty, _, _) = run_lls(&["--json", &path]);
-    let (compact, _, code) = run_lls(&["--json", "--compact", &path]);
+    let (pretty, _, _) = run_lls(&["--json", "--depth", "2", &path]);
+    let (compact, _, code) = run_lls(&["--json", "--compact", "--depth", "2", &path]);
 
     assert_eq!(code, 0);
     // Compact should have no newlines (strip trailing newline from println!)

@@ -11,21 +11,41 @@ pub struct ProjectType {
 pub fn detect(entries: &[ClassifiedEntry]) -> ProjectType {
     let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
     let paths: Vec<&str> = entries.iter().map(|e| e.path.as_str()).collect();
-    let has = |name: &str| names.contains(&name) || paths.contains(&name);
+    let has_name = |name: &str| names.contains(&name);
+    let has_path = |p: &str| paths.contains(&p);
+    let has = |name: &str| has_name(name) || has_path(name);
+    // Check for entries in a subpath (e.g. src/main.rs)
+    let has_path_with = |suffix: &str| paths.iter().any(|p| p.ends_with(suffix));
 
     // Check for manifest files
     let has_cargo = has("Cargo.toml");
-    let has_src_dir = names.contains(&"src") || paths.contains(&"src");
     let has_package_json = has("package.json");
     let has_pyproject = has("pyproject.toml");
     let has_setup_py = has("setup.py");
     let has_go_mod = has("go.mod");
 
     if has_cargo {
-        if has_src_dir {
+        let has_src_dir = has("src") || has_path("src/");
+        let has_main_rs = has_name("main.rs") || has_path_with("src/main.rs");
+        let has_lib_rs = has_name("lib.rs") || has_path_with("src/lib.rs");
+        if has_src_dir && has_main_rs {
             return ProjectType {
                 name: "rust_cli".into(),
                 confidence: 0.9,
+                evidence: vec!["Cargo.toml".into(), "src/main.rs".into()],
+            };
+        }
+        if has_src_dir && has_lib_rs {
+            return ProjectType {
+                name: "rust_library".into(),
+                confidence: 0.9,
+                evidence: vec!["Cargo.toml".into(), "src/lib.rs".into()],
+            };
+        }
+        if has_src_dir {
+            return ProjectType {
+                name: "rust_package".into(),
+                confidence: 0.8,
                 evidence: vec!["Cargo.toml".into(), "src/".into()],
             };
         }
@@ -110,9 +130,17 @@ mod tests {
 
     #[test]
     fn test_rust_cli_detection() {
-        let entries = vec![entry("Cargo.toml"), entry("src")];
+        let entries = vec![entry("Cargo.toml"), entry("src"), entry("main.rs")];
         let pt = detect(&entries);
         assert_eq!(pt.name, "rust_cli");
+        assert!(pt.confidence > 0.8);
+    }
+
+    #[test]
+    fn test_rust_library_detection() {
+        let entries = vec![entry("Cargo.toml"), entry("src"), entry("lib.rs")];
+        let pt = detect(&entries);
+        assert_eq!(pt.name, "rust_library");
         assert!(pt.confidence > 0.8);
     }
 
