@@ -49,9 +49,8 @@ fn determine_priority(role: &str, path: &str, name: &str) -> String {
     }
 
     // Low
-    match role {
-        "license" => return "low".into(),
-        _ => {}
+    if role == "license" {
+        return "low".into();
     }
 
     // Ignore
