@@ -107,7 +107,7 @@ fn classify_role(meta: &EntryMeta) -> (String, String) {
                     return ("dependency_cache".into(), "キャッシュディレクトリ".into());
                 }
 
-                ("unknown".into(), format!("役割が特定できないディレクトリ"))
+                ("unknown".into(), "役割が特定できないディレクトリ".to_string())
             }
         };
     }
@@ -194,30 +194,30 @@ fn classify_role(meta: &EntryMeta) -> (String, String) {
                 return ("source_code".into(), "Ruby ソースファイル".into());
             }
             "md" | "markdown" | "rst" | "txt" => {
-                return ("documentation".into(), format!("ドキュメントファイル"));
+                return ("documentation".into(), "ドキュメントファイル".to_string());
             }
             "yml" | "yaml" => {
                 if path_lower.contains(".github/workflows")
                     || path_lower.contains(".gitlab-ci")
                 {
-                    return ("ci_config".into(), format!("CI/CD 設定ファイル"));
+                    return ("ci_config".into(), "CI/CD 設定ファイル".to_string());
                 }
-                return ("config".into(), format!("YAML 設定ファイル"));
+                return ("config".into(), "YAML 設定ファイル".to_string());
             }
             "json" => {
                 if name_lower == "tsconfig.json"
                     || name_lower == "eslintrc.json"
                     || name_lower == ".prettierrc"
                 {
-                    return ("config".into(), format!("設定ファイル"));
+                    return ("config".into(), "設定ファイル".to_string());
                 }
-                return ("config".into(), format!("JSON 設定ファイル"));
+                return ("config".into(), "JSON 設定ファイル".to_string());
             }
             "toml" => {
-                return ("config".into(), format!("TOML 設定ファイル"));
+                return ("config".into(), "TOML 設定ファイル".to_string());
             }
             "cfg" | "conf" | "ini" => {
-                return ("config".into(), format!("設定ファイル"));
+                return ("config".into(), "設定ファイル".to_string());
             }
             "pem" | "key" => {
                 return ("secret_candidate".into(), "秘密鍵や証明書の可能性がある".into());
@@ -226,13 +226,13 @@ fn classify_role(meta: &EntryMeta) -> (String, String) {
                 return ("lockfile".into(), "依存関係の固定ファイル".into());
             }
             "css" | "scss" | "less" => {
-                return ("source_code".into(), format!("スタイルシートファイル"));
+                return ("source_code".into(), "スタイルシートファイル".to_string());
             }
             "html" | "htm" | "vue" | "svelte" => {
-                return ("source_code".into(), format!("テンプレート/マークアップファイル"));
+                return ("source_code".into(), "テンプレート/マークアップファイル".to_string());
             }
             "svg" => {
-                return ("generated".into(), format!("SVG 画像ファイル"));
+                return ("generated".into(), "SVG 画像ファイル".to_string());
             }
             "min.js" | "min.css" => {
                 return ("generated".into(), "Minified ファイル。内容の読み取りには向かない".into());
@@ -259,7 +259,7 @@ fn classify_role(meta: &EntryMeta) -> (String, String) {
         || name_lower.ends_with(".test.js") || name_lower.ends_with("_test.js") || name_lower.ends_with(".spec.js")
         || name_lower.ends_with("_test.py") || name_lower.ends_with("test_.py")
     {
-        return ("test_code".into(), format!("テストファイル"));
+        return ("test_code".into(), "テストファイル".to_string());
     }
 
     // If binary, mark as generated

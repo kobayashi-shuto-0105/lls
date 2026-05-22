@@ -3,6 +3,9 @@ use std::path::Path;
 
 use crate::error::LlsError;
 
+/// Result from scanning: entries and warnings [(path, message)]
+pub type ScanResult = Result<(Vec<EntryMeta>, Vec<(String, String)>), LlsError>;
+
 #[derive(Debug, Clone)]
 pub struct EntryMeta {
     pub name: String,
@@ -36,7 +39,7 @@ impl EntryType {
 pub fn scan(
     target: &Path,
     max_depth: usize,
-) -> Result<(Vec<EntryMeta>, Vec<(String, String)>), LlsError> {
+) -> ScanResult {
     if !target.exists() {
         return Err(LlsError::NotFound(target.display().to_string()));
     }
