@@ -2,6 +2,7 @@ use std::fmt;
 use std::io;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum LlsError {
     Cli(String),
     NotFound(String),
