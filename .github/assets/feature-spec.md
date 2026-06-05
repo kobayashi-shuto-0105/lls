@@ -65,6 +65,7 @@ Phase 1 の詳細は [`spec.md`](spec.md) に定義し、この文書では MVP 
 | action extraction | candidate | medium | manifest から実行可能コマンドを抽出する |
 | language detection | candidate | medium | ファイルやディレクトリの言語を推定する |
 | entrypoint detection | candidate | medium | main file や起点ファイルを推定する |
+| content view mode | candidate | high | `lls cat <path>` で内容を閲覧し、秘密情報を自動マスクする |
 | explanation mode | candidate | low | 理由説明の詳細度を切り替える |
 
 ---
@@ -449,3 +450,62 @@ sensitive file     read recommendation から除外
 - generated file や dependency cache は原則として優先度を下げる
 - ルールはできるだけ決定的にする
 - fixture を使ってテストできる設計にする
+
+---
+
+## 18. 内容閲覧 mode
+
+### 18.1 目的
+
+探索で有望そうなファイルを見つけたあと、その中身を LLM や人間が確認しやすくする。
+
+`lls cat <path>` のような別コマンドとして提供する案を想定する。
+
+### 18.2 基本方針
+
+- デフォルトで redaction を有効にする
+- API key、token、Bearer 値、JWT、private key、`.env` 形式の値などを機械的にマスクする
+- マスクは安全策であり、完全な防御ではないと明示する
+- バイナリや巨大ファイルは、そのまま全文表示せず警告や要約に切り替える
+- 行番号付きで表示できると、人間にも LLM にも扱いやすい
+
+### 18.3 CLI 案
+
+```sh
+lls cat <path>
+```
+
+将来的には次のようなオプションを追加できる。
+
+| オプション | 内容 |
+|---|---|
+| `--raw` | redaction を無効にして生の内容を出す |
+| `--head <n>` | 先頭 n 行だけ出す |
+| `--tail <n>` | 末尾 n 行だけ出す |
+| `--max-bytes <n>` | それ以上は全文表示しない |
+| `--language <lang>` | 表示補助の言語を明示する |
+
+### 18.4 redaction の対象候補
+
+| パターン | 例 |
+|---|---|
+| API key | `sk-...`, `api_key=...` |
+| Bearer token | `Authorization: Bearer ...` |
+| JWT | `eyJ...` で始まる長いトークン |
+| private key | `-----BEGIN ... PRIVATE KEY-----` |
+| .env 形式 | `SECRET=...`, `TOKEN=...` |
+| 高エントロピー文字列 | 長いランダムっぽい値 |
+
+### 18.5 出力イメージ
+
+```txt
+1  DATABASE_URL=postgres://...
+2  OPENAI_API_KEY=[REDACTED]
+3  TOKEN=[REDACTED]
+```
+
+### 18.6 既存仕様との関係
+
+- `token awareness` と連携して、読む前に危険度を判断できるとよい
+- `sensitive detection` と連携して、秘密情報候補のファイルは最初から慎重に扱う
+- `--json` / `--human` / `-l` とは別の「内容閲覧モード」として扱う
