@@ -509,3 +509,4 @@ lls cat <path>
 - `token awareness` と連携して、読む前に危険度を判断できるとよい
 - `sensitive detection` と連携して、秘密情報候補のファイルは最初から慎重に扱う
 - `--json` / `--human` / `-l` とは別の「内容閲覧モード」として扱う
+- 実装のざっくり計画は [`docs/content-view-plan.md`](../../docs/content-view-plan.md) に置く
