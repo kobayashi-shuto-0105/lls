@@ -44,7 +44,7 @@ MVP として実装する仕様は [`spec.md`](spec.md) に定義する。
 | Phase 3 | Git や monorepo 対応 |
 | Phase 4 | ルールのカスタマイズと拡張性 |
 
-Phase 1 の詳細は `spec.md` に定義する。
+Phase 1 の詳細は [`spec.md`](spec.md) に定義し、この文書では MVP 以降の候補だけを残す。
 
 ---
 
