@@ -18,6 +18,7 @@ ADRは「実装方法のメモ」ではなく、後から変更すると複数mo
 - security invariant
 - deterministic behavior
 - 大きなdependency導入
+- documentation siteのgenerator、theme、公開branch、deployment方式
 
 次は通常ADR不要。
 
@@ -26,6 +27,7 @@ ADRは「実装方法のメモ」ではなく、後から変更すると複数mo
 - typo修正
 - test fixture追加
 - specで既に確定した挙動の実装
+- Hugo content pageの追加や文章修正
 
 ---
 
@@ -103,3 +105,4 @@ NNNN-short-kebab-case-title.md
 | ADR | Status | Decision |
 |---|---|---|
 | [0001](0001-deterministic-core-and-codex-boundary.md) | accepted | 通常実行を決定的なローカルコアとし、Codexをsetup境界へ隔離する |
+| [0002](0002-hugo-site-and-gh-pages-worktree.md) | accepted | Hugo sourceを`docs/`、生成物を`gh-pages` worktreeへ分離してGitHub Pagesで公開する |
