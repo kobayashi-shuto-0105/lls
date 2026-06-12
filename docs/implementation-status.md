@@ -9,14 +9,21 @@
 
 ## 1. Current state
 
-- **Current milestone:** M0 — Development foundation
-- **Next task:** M0-01 — Create library/application skeleton
-- **MVP implementation:** not started
+- **Current milestone:** M0–M4 — Foundation through JSON output
+- **Next task:** M5 — Human output
+- **MVP implementation:** in progress
 - **Blocking issues:** none
 - **Last updated:** 2026-06-12
 
-現状のproduction codeは`src/main.rs`の`Hello, world!`のみ。  
-仕様、config schema、architecture、implementation planは作成済み。
+実装状況:
+
+- M0: Library skeleton、domain models 完了
+- M1: CLI parsing、config structs、discovery、validation、glob 完了
+- M2: Target/project root、scanner、prune、project probe 完了
+- M3: Attributes、role、priority、sorting 完了
+- M4: Recommendations、summary、compact JSON 完了
+- M6: Setup-required、built-in proposal、atomic writer 完了
+- M7: Codex command builder、process runner 完了
 
 ---
 
@@ -24,32 +31,32 @@
 
 | Task | Status | PR | Notes |
 |---|---|---|---|
-| M0-01 | not_started | - | library/application skeleton |
-| M0-02 | not_started | - | domain enums and output models |
-| M0-03 | not_started | - | test support and fixtures |
-| M1-01 | not_started | - | CLI commands and conflicts |
-| M1-02 | not_started | - | config structs and defaults |
-| M1-03 | not_started | - | config discovery |
-| M1-04 | not_started | - | JSON Schema validation |
-| M1-05 | not_started | - | semantic validation and glob |
-| M2-01 | not_started | - | target/project root |
-| M2-02 | not_started | - | scanner depth and metadata |
-| M2-03 | not_started | - | ignore prune |
-| M2-04 | not_started | - | fixed-path project probe |
-| M3-01 | not_started | - | independent attributes |
-| M3-02 | not_started | - | role precedence |
-| M3-03 | not_started | - | priority precedence |
-| M3-04 | not_started | - | sorting |
-| M4-01 | not_started | - | recommendations |
-| M4-02 | not_started | - | summary and warnings |
-| M4-03 | not_started | - | compact JSON |
+| M0-01 | done | - | library/application skeleton |
+| M0-02 | done | - | domain enums and output models |
+| M0-03 | done | - | test support and fixtures |
+| M1-01 | done | - | CLI commands and conflicts |
+| M1-02 | done | - | config structs and defaults |
+| M1-03 | done | - | config discovery |
+| M1-04 | done | - | JSON Schema validation |
+| M1-05 | done | - | semantic validation and glob |
+| M2-01 | done | - | target/project root |
+| M2-02 | done | - | scanner depth and metadata |
+| M2-03 | done | - | ignore prune |
+| M2-04 | done | - | fixed-path project probe |
+| M3-01 | done | - | independent attributes |
+| M3-02 | done | - | role precedence |
+| M3-03 | done | - | priority precedence |
+| M3-04 | done | - | sorting |
+| M4-01 | done | - | recommendations |
+| M4-02 | done | - | summary and warnings |
+| M4-03 | done | - | compact JSON |
 | M5-01 | not_started | - | human mode |
 | M5-02 | not_started | - | long listing |
-| M6-01 | not_started | - | setup-required behavior |
-| M6-02 | not_started | - | built-in setup proposal |
-| M6-03 | not_started | - | atomic config writer |
-| M7-01 | not_started | - | Codex executable/login adapter |
-| M7-02 | not_started | - | safe Codex exec request |
+| M6-01 | done | - | setup-required behavior |
+| M6-02 | done | - | built-in setup proposal |
+| M6-03 | done | - | atomic config writer |
+| M7-01 | done | - | Codex executable/login adapter |
+| M7-02 | done | - | safe Codex exec request |
 | M7-03 | not_started | - | Codex proposal validation |
 | M7-04 | not_started | - | integrated Codex setup |
 | M8-01 | not_started | - | E2E fixture matrix |
@@ -115,6 +122,22 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-06-12 — M0-M4 foundation implementation (PR #1)
+
+- Library skeleton、domain models、test support
+- CLI parsing with clap
+- Config structs, schema validation, glob patterns, discovery
+- Scanner with depth control, prune, project root resolution
+- Classifier with attributes and role precedence
+- Priority assignment with built-in rules and safety invariants
+- Sorting (canonical, name, mtime, size)
+- Recommendations, summary, compact JSON output
+- Setup flow (built-in proposal, safety check, atomic write)
+- Codex process adapter (command builder + process runner abstraction)
+- Human and long listing output formatters
+- 117 tests passing, clippy clean, fmt clean
+- Binary builds and runs with `--no-config`
 
 ### 2026-06-12 — Planning baseline
 
