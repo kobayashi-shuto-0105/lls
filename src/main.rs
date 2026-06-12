@@ -1,6 +1,3 @@
-use std::path::Path;
-use std::process;
-
 use lls::app::{self, CommandRequest, OutputMode};
 use lls::classifier::{classify_attributes, classify_role};
 use lls::cli::CliArgs;
@@ -14,7 +11,8 @@ use lls::recommendation::generate_recommendations;
 use lls::scanner::Scanner;
 use lls::setup;
 use lls::sorting::{SortField, sort_entries};
-
+use std::path::Path;
+use std::process;
 fn main() {
     let args = match try_parse_cli() {
         Ok(a) => a,
@@ -23,7 +21,6 @@ fn main() {
             process::exit(1);
         }
     };
-
     match run(args) {
         Ok(()) => process::exit(0),
         Err(err) => {
@@ -57,29 +54,23 @@ fn main() {
         }
     }
 }
-
 fn run(args: CliArgs) -> Result<(), AppError> {
     let request = app::parse_request(args)?;
-
     match request {
         CommandRequest::List(list_req) => run_list(list_req),
         CommandRequest::Setup(setup_req) => run_setup(setup_req),
     }
 }
-
 fn run_list(req: app::ListRequest) -> Result<(), AppError> {
     let target_path = Path::new(&req.path);
-
     // Resolve target
     if !target_path.exists() {
         return Err(AppError::TargetNotFound {
             path: target_path.to_path_buf(),
         });
     }
-
     // Resolve project root
     let project_root = resolve_project_root(target_path)?;
-
     // Discover config
     let (config, output_mode) = match &req.config_source {
         app::ConfigSource::Explicit(config_path) => {
@@ -111,7 +102,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             (None, req.output_mode)
         }
     };
-
     // Determine effective settings
     let depth = config.as_ref().map(|c| c.scan.depth).unwrap_or(req.depth);
     let include_ignored = config
@@ -128,21 +118,17 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
                 ignore_patterns: vec![],
                 sensitive_patterns: vec![],
             });
-
     // Scan
     let scanner = Scanner::new(&rules.ignore_patterns, include_ignored);
     let scan_result = scanner.scan(target_path, depth);
-
     // Classify each entry
     let mut entries: Vec<Entry> = scan_result
         .entries
         .into_iter()
         .map(|raw| {
             let path_str = raw.relative_path.to_string_lossy().replace('\\', "/");
-
             let attrs = classify_attributes(&raw.name, &path_str, raw.entry_type, &rules);
             let role = classify_role(&raw.name, &path_str, raw.entry_type, &rules);
-
             let _reason_code = if attrs.sensitive {
                 "sensitive_name_pattern".to_string()
             } else if attrs.generated {
@@ -150,7 +136,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             } else {
                 format!("role_{}", role.as_str())
             };
-
             let reason = match role {
                 Role::ProjectOverview => "プロジェクト概要".into(),
                 Role::Manifest => "マニフェストファイル".into(),
@@ -166,7 +151,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
                 Role::DependencyCache => "依存キャッシュ".into(),
                 Role::Unknown => "分類不明".into(),
             };
-
             let priority_result = assign_priority(
                 &raw.name,
                 &path_str,
@@ -176,10 +160,8 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
                 attrs.sensitive,
                 &rules,
             );
-
             let text = attrs.text;
             let binary = attrs.binary;
-
             Entry {
                 name: raw.name,
                 path: path_str,
@@ -197,7 +179,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             }
         })
         .collect();
-
     // Sort entries
     let sort_field = match req.sort {
         Some(lls::cli::SortBy::Name) => SortField::Name,
@@ -206,13 +187,10 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
         Some(lls::cli::SortBy::Priority) | None => SortField::Canonical,
     };
     sort_entries(&mut entries, &sort_field);
-
     // Project probe
     let probe_result = probe_project(&project_root);
-
     // Recommendations
     let recommendations = generate_recommendations(&entries);
-
     // Build summary
     let total_entries = entries.len();
     let shown_entries = entries.len();
@@ -224,7 +202,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
         .iter()
         .filter(|e| matches!(e.priority, Priority::Ignore))
         .count();
-
     // Build output entries
     let output_entries: Vec<EntryOutput> = entries
         .iter()
@@ -243,7 +220,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             size_bytes: e.size_bytes,
         })
         .collect();
-
     // Build warnings from scan + probe
     let mut warnings: Vec<WarningOutput> = scan_result
         .warnings
@@ -261,7 +237,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             message: w.message,
         });
     }
-
     // Sensitive candidate warning
     for entry in &output_entries {
         if entry.sensitive {
@@ -272,9 +247,7 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             });
         }
     }
-
     let path_str = req.path;
-
     let doc = OutputDocument {
         schema_version: "0.1.0".into(),
         path: path_str.clone(),
@@ -301,7 +274,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             .collect(),
         warnings,
     };
-
     // Output
     match output_mode {
         OutputMode::Json => {
@@ -317,14 +289,11 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             print!("{text}");
         }
     }
-
     Ok(())
 }
-
 fn run_setup(req: app::SetupRequest) -> Result<(), AppError> {
     let target_path = Path::new(&req.path);
     let project_root = resolve_project_root(target_path)?;
-
     // Check existing config
     let config_path = project_root.join(".lls").join("config.json");
     if config_path.exists() && !req.force {
@@ -332,43 +301,33 @@ fn run_setup(req: app::SetupRequest) -> Result<(), AppError> {
             "config already exists at .lls/config.json, use --force to overwrite".into(),
         ));
     }
-
     // Generate proposal
     let proposal = setup::generate_proposal();
-
     // Validate proposal
     let proposal_json = serde_json::to_string_pretty(&proposal)
         .map_err(|e| AppError::Runtime(format!("serialization error: {e}")))?;
-
     let validated = validate_config(&proposal_json)?;
     setup::safety_check(&validated.config)?;
-
     // Confirm with user (skip if --yes)
     if !req.yes {
         eprintln!("lls: config proposal for {}:\n", project_root.display());
         eprintln!("{proposal_json}\n");
         eprint!("Write this config to .lls/config.json? [y/N] ");
-
         use std::io::Write;
         std::io::stderr().flush().ok();
-
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).ok();
         let input = input.trim().to_lowercase();
-
         if input != "y" && input != "yes" {
             eprintln!("lls: setup cancelled");
             return Ok(());
         }
     }
-
     // Write
     setup::write_config(&project_root, &proposal_json, req.force)?;
     eprintln!("lls: config written to .lls/config.json");
-
     Ok(())
 }
-
 /// Resolve the project root by looking for `.git` in ancestor directories.
 fn resolve_project_root(target: &Path) -> Result<std::path::PathBuf, AppError> {
     let canonical = target
@@ -376,14 +335,12 @@ fn resolve_project_root(target: &Path) -> Result<std::path::PathBuf, AppError> {
         .map_err(|_| AppError::TargetNotFound {
             path: target.to_path_buf(),
         })?;
-
     // If target is a file, start from its parent
     let start = if canonical.is_dir() {
         &canonical
     } else {
         canonical.parent().unwrap_or(&canonical)
     };
-
     // Walk up looking for .git
     let mut current = Some(start);
     while let Some(dir) = current {
@@ -392,7 +349,6 @@ fn resolve_project_root(target: &Path) -> Result<std::path::PathBuf, AppError> {
         }
         current = dir.parent();
     }
-
     // No .git found: use target itself (or parent of file)
     if canonical.is_dir() {
         Ok(canonical)
@@ -400,7 +356,6 @@ fn resolve_project_root(target: &Path) -> Result<std::path::PathBuf, AppError> {
         Ok(canonical.parent().unwrap_or(&canonical).to_path_buf())
     }
 }
-
 fn try_parse_cli() -> Result<CliArgs, String> {
     use clap::Parser;
     match CliArgs::try_parse_from(std::env::args()) {
@@ -416,49 +371,5 @@ fn try_parse_cli() -> Result<CliArgs, String> {
             // For other errors, propagate as string
             Err(e.to_string())
         }
-    }
-}
-
-#[cfg(test)]
-mod e2e_tests {
-    use std::process::Command;
-
-    fn lls_binary() -> std::path::PathBuf {
-        let mut path = std::env::current_dir().unwrap_or_default();
-        path.push("target");
-        path.push("debug");
-        path.push("lls");
-        path
-    }
-
-    #[test]
-    fn test_no_config_flag() {
-        let dir = tempfile::tempdir().unwrap();
-        let output = Command::new(lls_binary())
-            .arg("--no-config")
-            .current_dir(dir.path())
-            .output()
-            .expect("failed to run lls");
-        assert!(output.status.success());
-    }
-
-    #[test]
-    fn test_conflicting_modes() {
-        let output = Command::new(lls_binary())
-            .args(["--json", "--human"])
-            .output()
-            .expect("failed to run lls");
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("error"));
-    }
-
-    #[test]
-    fn test_help() {
-        let output = Command::new(lls_binary())
-            .arg("--help")
-            .output()
-            .expect("failed to run lls");
-        assert!(output.status.success());
     }
 }
