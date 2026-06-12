@@ -129,13 +129,6 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
             let path_str = raw.relative_path.to_string_lossy().replace('\\', "/");
             let attrs = classify_attributes(&raw.name, &path_str, raw.entry_type, &rules);
             let role = classify_role(&raw.name, &path_str, raw.entry_type, &rules);
-            let _reason_code = if attrs.sensitive {
-                "sensitive_name_pattern".to_string()
-            } else if attrs.generated {
-                "generated_name_pattern".to_string()
-            } else {
-                format!("role_{}", role.as_str())
-            };
             let reason = match role {
                 Role::ProjectOverview => "プロジェクト概要".into(),
                 Role::Manifest => "マニフェストファイル".into(),
@@ -294,6 +287,7 @@ fn run_list(req: app::ListRequest) -> Result<(), AppError> {
 fn run_setup(req: app::SetupRequest) -> Result<(), AppError> {
     let target_path = Path::new(&req.path);
     let project_root = resolve_project_root(target_path)?;
+
     // Check existing config
     let config_path = project_root.join(".lls").join("config.json");
     if config_path.exists() && !req.force {
@@ -301,13 +295,21 @@ fn run_setup(req: app::SetupRequest) -> Result<(), AppError> {
             "config already exists at .lls/config.json, use --force to overwrite".into(),
         ));
     }
-    // Generate proposal
-    let proposal = setup::generate_proposal();
-    // Validate proposal
-    let proposal_json = serde_json::to_string_pretty(&proposal)
-        .map_err(|e| AppError::Runtime(format!("serialization error: {e}")))?;
-    let validated = validate_config(&proposal_json)?;
-    setup::safety_check(&validated.config)?;
+
+    // Generate proposal (with or without Codex)
+    let proposal_json = if req.without_codex {
+        let proposal = setup::generate_proposal();
+        let json = serde_json::to_string_pretty(&proposal)
+            .map_err(|e| AppError::Runtime(format!("serialization error: {e}")))?;
+        let validated = validate_config(&json)?;
+        setup::safety_check(&validated.config)?;
+        json
+    } else {
+        let codex_output = setup::run_codex_setup(&project_root)?;
+        let validated = setup::validate_codex_output(&codex_output)?;
+        validated.raw_json
+    };
+
     // Confirm with user (skip if --yes)
     if !req.yes {
         eprintln!("lls: config proposal for {}:\n", project_root.display());
@@ -323,6 +325,7 @@ fn run_setup(req: app::SetupRequest) -> Result<(), AppError> {
             return Ok(());
         }
     }
+
     // Write
     setup::write_config(&project_root, &proposal_json, req.force)?;
     eprintln!("lls: config written to .lls/config.json");

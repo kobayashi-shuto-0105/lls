@@ -58,19 +58,91 @@
 
 ## Current Status
 
-現状は Rust 製 CLI の最小構成です。
+**MVP implementation in progress.** All core modules are implemented and tested.
 
-- `Cargo.toml`: Rust パッケージ定義
-- `src/main.rs`: エントリポイント
+## Installation
 
-実装はまだこれからで、まずは「どんなツールにするか」を整理してから形にしていく段階です。
+```bash
+# Build from source
+git clone https://github.com/kobayashi-shuto-0105/lls.git
+cd lls
+cargo build --release
+# Binary at target/release/lls
+```
+
+Install via `cargo` (once published):
+```bash
+cargo install lls
+```
+
+## Usage
+
+### Basic listing (requires config or `--no-config`)
+
+```bash
+# Use built-in defaults (no config file needed)
+lls --no-config
+
+# With automatic config discovery
+lls setup --without-codex  # create .lls/config.json
+lls                         # use discovered config
+```
+
+### Output modes
+
+```bash
+lls --json       # compact JSON (default)
+lls --human      # human-readable text
+lls -l           # long listing format
+```
+
+### Options
+
+```bash
+lls <path>                   # scan a specific path
+lls --depth <0-8>            # set scan depth (default: 1)
+lls --sort <name|mtime|size|priority>
+lls --config <path>          # use explicit config file
+lls --no-config              # skip config discovery
+```
+
+### Setup
+
+```bash
+lls setup                    # generate config with Codex assist
+lls setup --without-codex    # generate config from built-in defaults
+lls setup --force            # overwrite existing config
+lls setup --yes              # skip confirmation prompt
+```
+
+## Output Example
+
+```json
+{"schema_version":"0.1.0","path":".","project_type":{"name":"rust_cli","confidence":0.95,"evidence":["Cargo.toml","src/main.rs"]},"summary":{"total_entries":7,"shown_entries":7,"important_entries":4,"ignored_entries":2},"entries":[{"name":"Cargo.toml","path":"Cargo.toml","type":"file","role":"manifest","priority":"critical","reason_code":"known_manifest","reason":"マニフェストファイル","generated":false,"sensitive":false,"text":true,"binary":false,"size_bytes":1024},{"name":"README.md","path":"README.md","type":"file","role":"project_overview","priority":"critical","reason_code":"project_overview","reason":"プロジェクト概要","generated":false,"sensitive":false,"text":true,"binary":false,"size_bytes":512},{"name":"src","path":"src","type":"directory","role":"source_code","priority":"high","reason_code":"source_code_directory","reason":"ソースコード","generated":false,"sensitive":false,"text":false,"binary":false}],"recommended_next_steps":[{"action":"read","path":"README.md","reason_code":"read_project_overview_first","reason":"プロジェクト概要を把握するため"},{"action":"read","path":"Cargo.toml","reason_code":"read_manifest_first","reason":"プロジェクト構成を理解するため"}],"warnings":[]}
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|-----:|---------|
+| `0` | Success |
+| `1` | CLI argument error |
+| `2` | Target path not found |
+| `3` | Permission denied |
+| `4` | Unexpected runtime error |
+| `5` | Setup required (no config found) |
+| `6` | Codex CLI failure |
+| `7` | Invalid configuration |
 
 ## Development
 
-将来的には、次のような使い方を想定しています。
-
 ```bash
-cargo run
-```
+# Run tests
+cargo test --all-targets --all-features
 
-実装が進んだら、ここに実行例やオプションを追記します。
+# Lint
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Format
+cargo fmt --all -- --check
+```
