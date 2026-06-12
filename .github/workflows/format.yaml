@@ -1,0 +1,28 @@
+name: format
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: setup rustfmt
+        run: rustup component add rustfmt
+
+      - name: check formatting
+        run: cargo fmt --all -- --check
