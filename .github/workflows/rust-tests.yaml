@@ -1,0 +1,10 @@
+name: rust-tests
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup update stable
+      - run: cargo test
