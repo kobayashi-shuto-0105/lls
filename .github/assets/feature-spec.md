@@ -1,297 +1,83 @@
 # lls Feature Spec
 
-このドキュメントは、`lls` の将来的な機能候補や拡張案を管理するためのメモである。
-
-MVP として実装する仕様は [`spec.md`](spec.md) に定義する。  
-このドキュメントに書かれている内容は、初期実装では必須ではない。
+このドキュメントは、`lls` の MVP 後に検討する機能候補を管理する。  
+MVP の正式仕様は [`spec.md`](spec.md) であり、本書に重複記載しない。
 
 ---
 
-## 1. この文書の役割
-
-この文書の役割は次の通り。
-
-- MVP に入れない機能候補を残す
-- 将来的な出力スキーマの拡張案を整理する
-- CLI オプションの候補を管理する
-- 実装時に消えやすいアイデアを残す
-- コア仕様である `spec.md` を肥大化させない
-
-ここに書かれている機能は、実装が確定しているわけではない。
-
----
-
-## 2. ステータス
-
-将来機能には、必要に応じて次のステータスを付ける。
+## 1. status
 
 | status | 意味 |
 |---|---|
-| `candidate` | 候補。実装するか未確定 |
-| `planned` | 将来的に実装する予定 |
-| `blocked` | 他の設計や機能に依存している |
-| `rejected` | 実装しない判断をした |
-| `done` | 実装済み |
+| `candidate` | 候補 |
+| `planned` | 実装予定 |
+| `blocked` | 依存事項あり |
+| `rejected` | 実装しない |
+| `done` | 実装済みまたは MVP へ移動済み |
 
 ---
 
-## 3. フェーズ案
+## 2. phase
 
 | Phase | 内容 |
 |---|---|
-| Phase 1 | MVP。role, priority, JSON, recommendation |
-| Phase 2 | 推定精度とメタデータの拡張 |
-| Phase 3 | Git や monorepo 対応 |
-| Phase 4 | ルールのカスタマイズと拡張性 |
+| Phase 1 | MVP。設定、Codex-assisted setup、role、priority、JSON、recommendation |
+| Phase 2 | メタデータ、出力形式、判定精度 |
+| Phase 3 | Git、monorepo、workspace |
+| Phase 4 | plugin、scoring、内容閲覧 |
 
-Phase 1 の詳細は [`spec.md`](spec.md) に定義し、この文書では MVP 以降の候補だけを残す。
+設定ファイル `.lls/config.json` と ChatGPT login による Codex-assisted setup は Phase 1 に含まれる。
 
 ---
 
-## 4. 将来機能候補
+## 3. 機能候補
 
 | 機能 | status | 優先度 | 内容 |
 |---|---|---:|---|
-| YAML 出力 | candidate | low | `--yaml` で YAML 出力する |
-| NDJSON 出力 | candidate | low | 1 行 1 JSON のストリーミング向け出力 |
-| ディレクトリ要約 | candidate | high | ディレクトリ配下を全部列挙せず要約する |
-| token awareness | candidate | high | LLM が読むには大きすぎるファイルを検出する |
-| 行数カウント | candidate | medium | テキストファイルの行数を返す |
-| git-aware mode | candidate | high | modified, staged, untracked などを返す |
-| monorepo detection | candidate | high | workspace や packages を推定する |
-| 設定ファイル対応 | candidate | medium | ユーザー定義ルールを読み込む |
-| sensitive detection v2 | candidate | high | 秘密情報候補の検出精度を上げる |
-| generated detection v2 | candidate | medium | 生成物判定を強化する |
-| action extraction | candidate | medium | manifest から実行可能コマンドを抽出する |
-| language detection | candidate | medium | ファイルやディレクトリの言語を推定する |
-| entrypoint detection | candidate | medium | main file や起点ファイルを推定する |
-| content view mode | candidate | high | `lls cat <path>` で内容を閲覧し、秘密情報を自動マスクする |
-| explanation mode | candidate | low | 理由説明の詳細度を切り替える |
+| YAML 出力 | candidate | low | `--yaml` |
+| NDJSON 出力 | candidate | low | 1 行 1 JSON |
+| directory summary | candidate | high | 子孫の要約 |
+| token awareness | candidate | high | 巨大ファイル検出 |
+| line count | candidate | medium | 行数 |
+| git-aware mode | candidate | high | modified / staged / untracked |
+| monorepo detection | candidate | high | workspace と member 推定 |
+| sensitive detection v2 | candidate | high | 検出精度向上 |
+| generated detection v2 | candidate | medium | 生成物判定強化 |
+| action extraction | candidate | medium | manifest から command 抽出 |
+| language detection | candidate | medium | 言語推定 |
+| entrypoint detection | candidate | medium | 起点推定 |
+| content view mode | candidate | high | redaction 付き内容閲覧 |
+| explanation mode | candidate | low | 判定詳細 |
+| README tagline | candidate | low | long listing の補助 |
+| PDF metadata title | candidate | low | long listing の補助 |
+| ignore file integration | candidate | medium | `.gitignore` / `.dockerignore` |
+| recent marker | candidate | low | birth time / ctime による `🆕` |
+| scoring-based priority | candidate | medium | rule score |
+| plugin rules | candidate | medium | 外部ルール追加 |
+| Codex setup refinement | candidate | medium | prompt、schema、再試行戦略の改善 |
+| OpenAI Platform API key auth | rejected | - | MVP 方針により対応しない |
 
 ---
 
-## 5. 出力スキーマ拡張案
+## 4. monorepo
 
-将来的には、トップレベル JSON に次のような項目を追加できる。
+MVP では `project_type: monorepo` を返さない。  
+将来は次を evidence として扱える。
 
-```json
-{
-  "schema_version": "0.2.0",
-  "path": ".",
-  "workspace": {},
-  "project_type": {},
-  "summary": {},
-  "entries": [],
-  "recommended_next_steps": [],
-  "actions": [],
-  "warnings": [],
-  "diagnostics": {}
-}
-```
+- `pnpm-workspace.yaml`
+- `turbo.json`
+- `nx.json`
+- workspace 設定を含む `Cargo.toml`
+- 複数の `package.json`
+- `apps/`, `packages/`, `crates/`, `services/`
 
----
-
-## 6. 追加候補のトップレベルフィールド
-
-| フィールド | 内容 |
-|---|---|
-| `workspace` | monorepo や workspace の情報 |
-| `actions` | manifest などから抽出した実行可能コマンド |
-| `diagnostics` | 判定ルールやスコアなどのデバッグ情報 |
-| `config` | 実際に使われた設定 |
-| `performance` | 実行時間や走査件数など |
-
----
-
-## 7. 追加候補の Entry フィールド
-
-将来的に entry に追加する候補は次の通り。
-
-| フィールド | 型 | 内容 |
-|---|---|---|
-| `line_count` | number | テキストファイルの行数 |
-| `estimated_tokens` | number | 推定トークン数 |
-| `language` | string | 推定された言語 |
-| `languages` | array | ディレクトリ内の主な言語 |
-| `git_status` | string | Git 上の状態 |
-| `last_modified` | string | 最終更新日時 |
-| `children_summary` | object | ディレクトリ配下の要約 |
-| `entrypoint` | boolean | 起点ファイルと推定されるか |
-| `workspace_member` | boolean | workspace のメンバーか |
-| `confidence` | number | role 判定の信頼度 |
-| `matched_rules` | array | 適用された判定ルール |
-
----
-
-## 8. ディレクトリ要約
-
-### 8.1 目的
-
-巨大なディレクトリをすべて列挙しても、LLM にとっては扱いにくい。
-
-例:
-
-- `src/`
-- `packages/`
-- `apps/`
-- `crates/`
-- `docs/`
-
-そのため、将来的にはディレクトリ配下を要約できるようにする。
-
----
-
-### 8.2 出力例
-
-```json
-{
-  "name": "src",
-  "path": "src",
-  "type": "directory",
-  "role": "source_code",
-  "priority": "high",
-  "summary": {
-    "total_entries": 12,
-    "languages": ["Rust"],
-    "notable_files": ["main.rs", "cli.rs", "scanner.rs"],
-    "dominant_roles": ["source_code"]
-  }
-}
-```
-
----
-
-## 9. token awareness
-
-### 9.1 目的
-
-LLM が巨大なファイルや低価値なファイルを不用意に読まないようにする。
-
-検出したいものの例:
-
-- minified JS
-- 巨大 JSON
-- 大きすぎる lockfile
-- vendored code
-- snapshot file
-- binary file
-
----
-
-### 9.2 出力候補
-
-```json
-{
-  "size_bytes": 1200000,
-  "line_count": 30000,
-  "estimated_tokens": 180000,
-  "read_risk": "too_large"
-}
-```
-
----
-
-### 9.3 read_risk 候補
-
-| 値 | 意味 |
-|---|---|
-| `safe` | 読んでも問題なさそう |
-| `large` | 必要な場合のみ読むべき |
-| `too_large` | 全文読み取りは避けるべき |
-| `binary` | テキストとして読むのに向かない |
-| `sensitive` | 秘密情報を含む可能性がある |
-| `generated` | 生成物であり読む優先度が低い |
-
----
-
-## 10. git-aware mode
-
-### 10.1 CLI 案
-
-```sh
-lls --json --git-aware
-```
-
----
-
-### 10.2 目的
-
-作業中のリポジトリでは、最近変更されたファイルや未追跡ファイルが重要なことが多い。
-
-git-aware mode では、次の情報を entry に追加する。
-
-- modified
-- staged
-- untracked
-- deleted
-- renamed
-- clean
-
----
-
-### 10.3 出力例
-
-```json
-{
-  "name": "src/main.rs",
-  "path": "src/main.rs",
-  "git_status": "modified"
-}
-```
-
----
-
-### 10.4 git_status 候補
-
-| 値 | 意味 |
-|---|---|
-| `modified` | 変更済み |
-| `staged` | staging 済み |
-| `untracked` | Git 管理外 |
-| `deleted` | 削除済み |
-| `renamed` | リネーム済み |
-| `clean` | 変更なし |
-| `unknown` | Git 状態を取得できない |
-
----
-
-## 11. monorepo 対応
-
-### 11.1 目的
-
-monorepo は単一パッケージのリポジトリと探索方法が異なる。
-
-よくある構成:
-
-```txt
-apps/
-packages/
-crates/
-services/
-libs/
-```
-
----
-
-### 11.2 判定材料
-
-| シグナル | 意味 |
-|---|---|
-| `pnpm-workspace.yaml` | pnpm workspace |
-| `turbo.json` | Turborepo |
-| `nx.json` | Nx workspace |
-| workspace 設定を含む `Cargo.toml` | Rust workspace |
-| 複数の `package.json` | Node.js 系 monorepo の可能性 |
-
----
-
-### 11.3 出力例
+候補出力:
 
 ```json
 {
   "workspace": {
     "type": "pnpm_workspace",
-    "members": ["apps/web", "packages/ui", "packages/api"],
+    "members": ["apps/web", "packages/ui"],
     "confidence": 0.9
   }
 }
@@ -299,120 +85,98 @@ libs/
 
 ---
 
-## 12. action extraction
+## 5. git-aware mode
 
-### 12.1 目的
+```sh
+lls --git-aware
+```
 
-LLM エージェントが次の行動を決めるには、実行可能なコマンドが分かると便利である。
-
-例:
-
-- `npm run test`
-- `cargo test`
-- `cargo build`
-- `pnpm dev`
-
----
-
-### 12.2 出力例
+候補 field:
 
 ```json
 {
-  "actions": [
-    {
-      "name": "test",
-      "command": "cargo test",
-      "source": "Cargo.toml"
-    },
-    {
-      "name": "build",
-      "command": "cargo build",
-      "source": "Cargo.toml"
-    }
-  ]
+  "git_status": "modified"
 }
 ```
 
----
-
-## 13. 設定ファイル対応
-
-### 13.1 目的
-
-プロジェクトによって重要なファイルは異なる。
-
-例:
-
-- ドキュメント中心のプロジェクトでは `docs/` が重要
-- アプリケーションでは `src/` が重要
-- 生成コード中心のリポジトリでは generated file を完全には無視できない
-
-そのため、将来的には設定ファイルでルールを変更できるようにする。
-
----
-
-### 13.2 設定ファイル名候補
+候補値:
 
 ```txt
-.lls.toml
-lls.toml
+modified
+staged
+untracked
+deleted
+renamed
+clean
+unknown
 ```
 
 ---
 
-### 13.3 設定例
+## 6. token awareness
 
-```toml
-[priority]
-"docs/" = "critical"
-"examples/" = "high"
+候補 field:
 
-[ignore]
-patterns = ["tmp/", "*.snapshot"]
-
-[sensitive]
-patterns = ["*.secret.json"]
+```json
+{
+  "line_count": 30000,
+  "estimated_tokens": 180000,
+  "read_risk": "too_large"
+}
 ```
 
----
-
-## 14. CLI オプション候補
-
-| オプション | 内容 |
-|---|---|
-| `--yaml` | YAML 出力 |
-| `--ndjson` | NDJSON 出力 |
-| `--max-entries 100` | 最大出力件数を制限 |
-| `--include-ignored` | ignore 対象も詳細に出す |
-| `--no-sensitive-warning` | sensitive warning を抑制 |
-| `--git-aware` | Git 状態を含める |
-| `--tokens` | 推定トークン数を含める |
-| `--explain` | 判定ルールやスコアを含める |
-| `--config <path>` | 明示的に設定ファイルを指定 |
-| `--no-config` | 設定ファイルを無視する |
-
----
-
-## 15. スコアリング方式の候補
-
-MVP では単純なルールベースでよい。
-
-将来的には、スコアリングによって priority を決めてもよい。
-
-例:
+候補値:
 
 ```txt
-README.md          +100
-manifest file      +90
-src/               +80
-tests/             +40
-docs/              +30
-build output       -100
-dependency cache   -100
-sensitive file     read recommendation から除外
+safe
+large
+too_large
+binary
+sensitive
+generated
 ```
 
-出力例:
+---
+
+## 7. advanced long listing
+
+MVP の `-l` は priority、role、type、size、path、属性だけを表示する。  
+将来、次を追加できる。
+
+- README tagline
+- PDF metadata title
+- ignore file integration
+- recent marker
+- git status
+- line count
+- estimated token count
+
+各機能は個別に無効化できることが望ましい。
+
+---
+
+## 8. content view mode
+
+候補:
+
+```sh
+lls cat <path>
+```
+
+基本方針:
+
+- redaction を既定で有効
+- binary と巨大ファイルを拒否または制限
+- API key、Bearer token、JWT、private key、`.env` value をマスク
+- `--raw` は強い警告を伴う明示 opt-in
+- 一覧モードとは別 command とする
+
+---
+
+## 9. scoring
+
+MVP は fixed precedence rule を使う。  
+将来は score を diagnostics として追加できる。
 
 ```json
 {
@@ -424,89 +188,35 @@ sensitive file     read recommendation から除外
 }
 ```
 
----
+score を導入しても、次は score より優先する。
 
-## 16. 慎重に扱うべき案
-
-次の案は便利だが、注意して扱う。
-
-| 案 | 懸念 |
-|---|---|
-| デフォルトで全ソースファイルを読む | 遅く、ノイズが多い |
-| `lls` 内部で LLM を使う | 非決定的でテストしにくい |
-| symlink をデフォルトで辿る | ループや想定外の探索が起きる |
-| sensitive file を完全に隠す | 存在を把握できなくなる |
-| pretty output を主 API にする | 機械的に扱いづらくなる |
+- sensitive を recommendation から除外
+- `.git/` を ignore
+- binary を recommendation から除外
 
 ---
 
-## 17. 設計原則
+## 10. Codex 拡張
 
-将来機能を追加する場合も、次の原則を守る。
+MVP の Codex 利用は setup 時の設定案生成だけである。  
+将来候補:
 
-- `lls` は完全理解ではなく、探索支援を目的にする
-- JSON 出力は安定させる
-- sensitive file は存在を表示するが、読む候補にはしない
-- generated file や dependency cache は原則として優先度を下げる
-- ルールはできるだけ決定的にする
-- fixture を使ってテストできる設計にする
+- setup prompt versioning
+- setup 結果の diagnostics
+- retry / repair loop
+- 生成案と built-in 案の diff
+- model capability negotiation
+- Enterprise access token を用いた trusted automation
+
+引き続き、`lls` が Codex の credential file を直接読む設計は採用しない。
 
 ---
 
-## 18. 内容閲覧 mode
+## 11. 設計原則
 
-### 18.1 目的
-
-探索で有望そうなファイルを見つけたあと、その中身を LLM や人間が確認しやすくする。
-
-`lls cat <path>` のような別コマンドとして提供する案を想定する。
-
-### 18.2 基本方針
-
-- デフォルトで redaction を有効にする
-- API key、token、Bearer 値、JWT、private key、`.env` 形式の値などを機械的にマスクする
-- マスクは安全策であり、完全な防御ではないと明示する
-- バイナリや巨大ファイルは、そのまま全文表示せず警告や要約に切り替える
-- 行番号付きで表示できると、人間にも LLM にも扱いやすい
-
-### 18.3 CLI 案
-
-```sh
-lls cat <path>
-```
-
-将来的には次のようなオプションを追加できる。
-
-| オプション | 内容 |
-|---|---|
-| `--raw` | redaction を無効にして生の内容を出す |
-| `--head <n>` | 先頭 n 行だけ出す |
-| `--tail <n>` | 末尾 n 行だけ出す |
-| `--max-bytes <n>` | それ以上は全文表示しない |
-| `--language <lang>` | 表示補助の言語を明示する |
-
-### 18.4 redaction の対象候補
-
-| パターン | 例 |
-|---|---|
-| API key | `sk-...`, `api_key=...` |
-| Bearer token | `Authorization: Bearer ...` |
-| JWT | `eyJ...` で始まる長いトークン |
-| private key | `-----BEGIN ... PRIVATE KEY-----` |
-| .env 形式 | `SECRET=...`, `TOKEN=...` |
-| 高エントロピー文字列 | 長いランダムっぽい値 |
-
-### 18.5 出力イメージ
-
-```txt
-1  DATABASE_URL=postgres://...
-2  OPENAI_API_KEY=[REDACTED]
-3  TOKEN=[REDACTED]
-```
-
-### 18.6 既存仕様との関係
-
-- `token awareness` と連携して、読む前に危険度を判断できるとよい
-- `sensitive detection` と連携して、秘密情報候補のファイルは最初から慎重に扱う
-- `--json` / `--human` / `-l` とは別の「内容閲覧モード」として扱う
-- 実装のざっくり計画は [`docs/content-view-plan.md`](../../docs/content-view-plan.md) に置く
+- MVP 仕様を本書へ重複させない
+- JSON の互換性を優先する
+- sensitive は存在を表示しても読む候補にしない
+- generated と role を混同しない
+- future feature は deterministic core を壊さない
+- fixture と fake process でテスト可能にする
