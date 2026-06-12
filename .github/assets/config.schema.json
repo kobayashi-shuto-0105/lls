@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kobayashi-shuto-0105/lls/blob/main/.github/assets/config.schema.json",
+  "title": "lls project configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "default_output",
+    "scan",
+    "long_listing",
+    "rules",
+    "codex"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "default_output": {
+      "enum": [
+        "json",
+        "human",
+        "long"
+      ]
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "depth",
+        "include_hidden",
+        "include_ignored"
+      ],
+      "properties": {
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "include_hidden": {
+          "type": "boolean"
+        },
+        "include_ignored": {
+          "type": "boolean"
+        }
+      }
+    },
+    "long_listing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sort"
+      ],
+      "properties": {
+        "sort": {
+          "enum": [
+            "priority",
+            "name",
+            "mtime",
+            "size"
+          ]
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "priority_overrides",
+        "role_overrides",
+        "ignore_patterns",
+        "sensitive_patterns"
+      ],
+      "properties": {
+        "priority_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pattern",
+              "priority"
+            ],
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "minLength": 1
+              },
+              "priority": {
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "ignore"
+                ]
+              }
+            }
+          }
+        },
+        "role_overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pattern",
+              "role"
+            ],
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "enum": [
+                  "project_overview",
+                  "manifest",
+                  "lockfile",
+                  "source_code",
+                  "test_code",
+                  "documentation",
+                  "config",
+                  "ci_config",
+                  "build_output",
+                  "dependency_cache",
+                  "license",
+                  "data",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        "ignore_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "sensitive_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "codex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "auth_method",
+        "use_for_setup"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "auth_method": {
+          "const": "chatgpt"
+        },
+        "use_for_setup": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
