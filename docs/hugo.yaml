@@ -1,0 +1,41 @@
+baseURL: "https://kobayashi-shuto-0105.github.io/lls/"
+locale: "ja-jp"
+title: "lls"
+enableRobotsTXT: true
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    noClasses: false
+
+params:
+  description: "ls for LLMs: a directory listing CLI for agents."
+  navbar:
+    displayTitle: true
+    displayLogo: false
+  theme:
+    default: system
+    displayToggle: true
+  page:
+    width: wide
+  footer:
+    displayCopyright: true
+    displayPoweredBy: true
+  search:
+    enable: true
+    type: flexsearch
+
+menu:
+  main:
+    - name: Docs
+      pageRef: /docs
+      weight: 1
+    - name: GitHub
+      url: "https://github.com/kobayashi-shuto-0105/lls"
+      weight: 2
