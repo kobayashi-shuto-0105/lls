@@ -24,3 +24,6 @@ target
 # Added by cargo
 
 /target
+
+# Hugo generated site / gh-pages worktree
+docs/public/
