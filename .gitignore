@@ -27,3 +27,5 @@ target
 
 # Hugo generated site / gh-pages worktree
 docs/public/
+.lls/
+.tmp-codex-schema/

@@ -1,0 +1,8 @@
+.git
+.github
+target
+docs/public
+.lls
+.tmp-codex-schema
+.DS_Store
+*.log
