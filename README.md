@@ -75,6 +75,45 @@ Install via `cargo` (once published):
 cargo install lls
 ```
 
+## Docker
+
+The runtime image in [`Containerfile`](Containerfile) uses `dhi.io/debian-base:trixie`.
+Authenticate to `dhi.io` before building:
+
+```sh
+docker login dhi.io
+```
+
+Build the image:
+
+```sh
+docker build \
+  --build-arg GIT_REVISION="$(git rev-parse --short HEAD)" \
+  --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --build-arg VERSION="$(awk -F'"' '/^version *=/{print $2; exit}' Cargo.toml)" \
+  -t lls:dev \
+  -f Containerfile \
+  .
+```
+
+Run the CLI:
+
+```sh
+docker run --rm lls:dev --help
+```
+
+Run against the current directory:
+
+```sh
+docker run --rm -v "$PWD:/work" -w /work lls:dev --no-config -H .
+```
+
+Generate project configuration in the mounted directory:
+
+```sh
+docker run --rm -v "$PWD:/work" -w /work lls:dev setup
+```
+
 ## Usage
 
 ### Basic listing (requires config or `--no-config`)
