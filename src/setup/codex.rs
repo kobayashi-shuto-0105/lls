@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use crate::codex::{ProcessError, ProcessRequest, ProcessRunner};
+use crate::codex::{
+    ProcessError, ProcessRequest, ProcessRunner, cleanup_schema_temp_file, write_schema_temp_file,
+};
 use crate::config::validate_config;
 use crate::error::AppError;
 
@@ -15,8 +17,10 @@ pub struct ValidatedCodexOutput {
 pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppError> {
     let runner = RealCodexRunner;
 
-    // Build the exec request
-    let schema_path = std::path::PathBuf::from("/dev/null"); // In practice, use embedded schema
+    // Write embedded schema to a temporary file
+    let schema_path = write_schema_temp_file(project_root)
+        .map_err(|e| AppError::Codex(format!("cannot write schema temp file: {e}")))?;
+
     let output_path = project_root.join(".lls").join(".codex-output.tmp");
 
     let cmd = crate::codex::build_codex_command(
@@ -38,13 +42,19 @@ pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppErro
     };
 
     // Run Codex
-    runner.run(request).map_err(map_codex_error)?;
+    let codex_result = runner.run(request);
+
+    // Clean up schema temp file regardless of outcome
+    cleanup_schema_temp_file(&schema_path);
+
+    // Map any Codex errors
+    codex_result.map_err(map_codex_error)?;
 
     // Read output from the temporary file
     let output = std::fs::read_to_string(&output_path)
         .map_err(|_| AppError::Codex("Codex did not write output file".into()))?;
 
-    // Clean up temp file
+    // Clean up output temp file
     let _ = std::fs::remove_file(&output_path);
 
     Ok(output)
