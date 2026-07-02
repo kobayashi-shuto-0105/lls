@@ -1,76 +1,134 @@
 use crate::model::*;
 
+const RESET: &str = "\x1b[0m";
+const BOLD: &str = "\x1b[1m";
+const DIM: &str = "\x1b[2m";
+const RED: &str = "\x1b[31m";
+const GREEN: &str = "\x1b[32m";
+const YELLOW: &str = "\x1b[33m";
+const BLUE: &str = "\x1b[34m";
+const MAGENTA: &str = "\x1b[35m";
+const CYAN: &str = "\x1b[36m";
+const BRIGHT_BLACK: &str = "\x1b[90m";
+
 /// Format the output document as human-readable text.
 pub fn to_human_string(doc: &OutputDocument) -> String {
     let mut out = String::new();
 
-    out.push_str(&format!("lls — {}\n", doc.path));
+    out.push_str(&format!("{BOLD}🌿 lls — {}{RESET}\n", doc.path));
     out.push_str(&format!(
-        "Project: {} (confidence {:.2})\n",
-        doc.project_type.name, doc.project_type.confidence
+        "{}{}{} {}{}{}  {}({:.2}){}\n",
+        BOLD,
+        CYAN,
+        "🧭 Project:",
+        MAGENTA,
+        doc.project_type.name,
+        RESET,
+        DIM,
+        doc.project_type.confidence,
+        RESET
     ));
     if !doc.project_type.evidence.is_empty() {
         out.push_str(&format!(
-            "Evidence: {}\n",
-            doc.project_type.evidence.join(", ")
+            "{}{}{} {}{}\n",
+            BOLD,
+            BLUE,
+            "🔎 Evidence:",
+            format_inline_list(&doc.project_type.evidence),
+            RESET
         ));
     }
     out.push('\n');
 
-    out.push_str("Summary\n");
+    out.push_str(&section_title("📊", "Summary", CYAN));
     out.push_str(&format!(
-        "  entries: {} total | {} shown | {} important | {} ignored\n",
+        "  {} {} total  {} {} shown  {} {} important  {} {} ignored\n",
+        paint("📦", BLUE),
         doc.summary.total_entries,
+        paint("👀", GREEN),
         doc.summary.shown_entries,
+        paint("🔥", RED),
         doc.summary.important_entries,
-        doc.summary.ignored_entries,
+        paint("🧹", YELLOW),
+        doc.summary.ignored_entries
     ));
     out.push_str(&format!(
-        "  signals: {} next steps | {} warnings\n",
+        "  {} {} next steps  {} {} warnings\n",
+        paint("🪄", GREEN),
         doc.recommended_next_steps.len(),
+        paint("⚠️", YELLOW),
         doc.warnings.len()
     ));
     out.push('\n');
 
-    out.push_str("Top entries\n");
+    out.push_str(&section_title("✨", "Top entries", MAGENTA));
     for (index, entry) in doc.entries.iter().take(20).enumerate() {
         out.push_str(&format!(
-            "  {:>2}. {:<8} | {:<16} | {:<9} | {:>8} | {}\n",
+            "  {}{:>2}.{} {}  {}  {}  {}  {}\n",
+            DIM,
             index + 1,
-            entry.priority,
-            humanize(&entry.role),
-            entry.entry_type,
-            format_size(entry.size_bytes),
-            entry.path
+            RESET,
+            priority_badge(&entry.priority),
+            role_badge(&entry.role),
+            entry_type_badge(&entry.entry_type),
+            paint(&format_size(entry.size_bytes), BRIGHT_BLACK),
+            path_badge(&entry.path)
         ));
         if entry.generated || entry.sensitive {
-            out.push_str(&format!("      flags: {}\n", format_flags(entry)));
+            out.push_str(&format!(
+                "      {} {}\n",
+                paint("🏷 flags:", YELLOW),
+                format_flags(entry)
+            ));
         }
-        out.push_str(&format!("      why: {}\n", entry.reason));
+        out.push_str(&format!(
+            "      {} {}\n",
+            paint("💡 why:", BLUE),
+            entry.reason
+        ));
     }
 
     if doc.entries.len() > 20 {
         out.push_str(&format!(
-            "  ... and {} more entries\n",
-            doc.entries.len() - 20
+            "  {} ... and {} more entries{}\n",
+            DIM,
+            doc.entries.len() - 20,
+            RESET
         ));
     }
 
     if !doc.recommended_next_steps.is_empty() {
-        out.push_str("\nNext steps\n");
+        out.push_str(&format!("\n{}", section_title("🪜", "Next steps", GREEN)));
         for (index, rec) in doc.recommended_next_steps.iter().enumerate() {
-            out.push_str(&format!("  {}. {} {}\n", index + 1, rec.action, rec.path));
-            out.push_str(&format!("     {}\n", rec.reason));
+            out.push_str(&format!(
+                "  {}{}.{} {} {}{}\n",
+                DIM,
+                index + 1,
+                RESET,
+                action_badge(&rec.action),
+                BOLD,
+                rec.path
+            ));
+            out.push_str(&format!("     {}{}\n", DIM, rec.reason));
+            out.push_str(RESET);
         }
     }
 
     if !doc.warnings.is_empty() {
-        out.push_str("\nWarnings\n");
+        out.push_str(&format!("\n{}", section_title("⚠️", "Warnings", YELLOW)));
         for w in &doc.warnings {
-            out.push_str(&format!("  - {}\n", w.code));
+            out.push_str(&format!(
+                "  {} {}\n",
+                paint("•", YELLOW),
+                paint(&w.code, BOLD)
+            ));
             out.push_str(&format!("    {}\n", w.message));
             if let Some(ref path) = w.path {
-                out.push_str(&format!("    path: {}\n", path));
+                out.push_str(&format!(
+                    "    {} {}\n",
+                    paint("📍 path:", BRIGHT_BLACK),
+                    path
+                ));
             }
         }
     }
@@ -80,6 +138,72 @@ pub fn to_human_string(doc: &OutputDocument) -> String {
 
 fn humanize(value: &str) -> String {
     value.replace('_', " ")
+}
+
+fn paint(text: &str, color: &str) -> String {
+    format!("{color}{text}{RESET}")
+}
+
+fn section_title(icon: &str, title: &str, color: &str) -> String {
+    format!("{BOLD}{color} {icon} {title}{RESET}\n")
+}
+
+fn priority_badge(priority: &str) -> String {
+    let (icon, color) = match priority {
+        "critical" => ("🟥", RED),
+        "high" => ("🟧", YELLOW),
+        "medium" => ("🟦", BLUE),
+        "low" => ("🟪", MAGENTA),
+        "ignore" => ("⬜", BRIGHT_BLACK),
+        _ => ("▫️", BRIGHT_BLACK),
+    };
+    paint(&format!("{icon} {}", priority.to_uppercase()), color)
+}
+
+fn role_badge(role: &str) -> String {
+    let icon = match role {
+        "project_overview" => "📖",
+        "manifest" => "📦",
+        "source_code" => "🧠",
+        "test_code" => "🧪",
+        "documentation" => "📝",
+        "ci_config" => "⚙️",
+        "config" => "🔧",
+        "lockfile" => "🔒",
+        "license" => "⚖️",
+        "data" => "🗂️",
+        "build_output" => "🏗️",
+        "dependency_cache" => "📚",
+        _ => "❔",
+    };
+    format!("{icon} {}", humanize(role))
+}
+
+fn entry_type_badge(entry_type: &str) -> String {
+    let icon = match entry_type {
+        "file" => "📄",
+        "directory" => "📁",
+        "symlink" => "🔗",
+        _ => "📦",
+    };
+    format!("{icon} {entry_type}")
+}
+
+fn path_badge(path: &str) -> String {
+    format!("{}{}{RESET}", BOLD, path)
+}
+
+fn action_badge(action: &str) -> String {
+    let icon = match action {
+        "read" => "📖",
+        "inspect" => "🔍",
+        _ => "➡️",
+    };
+    paint(&format!("{icon} {action}"), GREEN)
+}
+
+fn format_inline_list(items: &[String]) -> String {
+    items.join(&format!(" {}•{} ", BRIGHT_BLACK, RESET))
 }
 
 fn format_flags(entry: &EntryOutput) -> String {
@@ -179,7 +303,10 @@ mod tests {
         let output = to_human_string(&sample_doc());
         assert!(output.contains("lls — ."));
         assert!(output.contains("rust_cli"));
-        assert!(output.contains("Evidence: Cargo.toml, src/main.rs"));
+        assert!(output.contains("Evidence:"));
+        assert!(output.contains("Cargo.toml"));
+        assert!(output.contains("src/main.rs"));
+        assert!(output.contains("📊 Summary"));
         assert!(output.contains("Top entries"));
         assert!(output.contains("Cargo.toml"));
         assert!(output.contains("Next steps"));
@@ -195,12 +322,20 @@ mod tests {
     #[test]
     fn test_human_generated_marker() {
         let output = to_human_string(&sample_doc());
-        assert!(output.contains("flags: generated"));
+        assert!(output.contains("flags:"));
+        assert!(output.contains("generated"));
     }
 
     #[test]
     fn test_human_size_formatting() {
         assert_eq!(human_size(0), "0 B");
         assert_eq!(human_size(1024), "1.0 KB");
+    }
+
+    #[test]
+    fn test_priority_badge_includes_emoji() {
+        let badge = priority_badge("critical");
+        assert!(badge.contains("🟥"));
+        assert!(badge.contains("CRITICAL"));
     }
 }
