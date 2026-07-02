@@ -125,6 +125,14 @@
 
 新しいentryは上へ追加する。
 
+### 2026-07-02 — Codex subprocess timeout implementation
+
+- Implemented timeout enforcement in `src/codex/process.rs` using thread-based wait with channel timeout
+- Updated `RealCodexRunner` in `src/setup/codex.rs` to use shared `run_process_with_timeout` function
+- Added unit tests for real process timeout, success, not-found, and stderr capture
+- Added tests verifying timeout maps to exit code 6 (Codex/setup failure)
+- Fixes #13: `lls setup` no longer hangs indefinitely if Codex subprocess does not respond
+
 ### 2026-07-02 — README and Hugo docs entry cleanup
 
 - Translated the remaining English-heavy README sections into Japanese while keeping command examples intact
