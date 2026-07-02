@@ -68,7 +68,28 @@ impl Scanner {
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
 
-        self.scan_internal(target, target, depth, 0, &mut entries, &mut warnings);
+        let target_metadata = match fs::symlink_metadata(target) {
+            Ok(metadata) => metadata,
+            Err(e) => {
+                warnings.push(Warning {
+                    code: "metadata_error".into(),
+                    path: Some(target.to_string_lossy().into()),
+                    message: format!("cannot read metadata: {e}"),
+                });
+                return ScanResult { entries, warnings };
+            }
+        };
+
+        if let Some(raw) =
+            self.build_raw_entry(target, target, &target_metadata, true, &mut warnings)
+        {
+            let target_is_dir = raw.entry_type == EntryType::Directory;
+            entries.push(raw);
+
+            if target_is_dir && depth > 0 {
+                self.scan_internal(target, target, depth, 1, &mut entries, &mut warnings);
+            }
+        }
 
         ScanResult { entries, warnings }
     }
@@ -114,26 +135,14 @@ impl Scanner {
             };
 
             let absolute_path = entry.path();
-            let relative_path = absolute_path
-                .strip_prefix(root)
-                .unwrap_or(&absolute_path)
-                .to_path_buf();
-
-            let name = match entry.file_name().to_str() {
-                Some(n) => n.to_string(),
-                None => {
-                    warnings.push(Warning {
-                        code: "non_utf8_path_skipped".into(),
-                        path: None,
-                        message: "skipped non-UTF-8 path".into(),
-                    });
-                    continue;
-                }
-            };
 
             let metadata = match fs::symlink_metadata(&absolute_path) {
                 Ok(m) => m,
                 Err(e) => {
+                    let relative_path = absolute_path
+                        .strip_prefix(root)
+                        .unwrap_or(&absolute_path)
+                        .to_path_buf();
                     warnings.push(Warning {
                         code: "metadata_error".into(),
                         path: Some(relative_path.to_string_lossy().into()),
@@ -143,38 +152,17 @@ impl Scanner {
                 }
             };
 
-            let entry_type = if metadata.is_symlink() {
-                EntryType::Symlink
-            } else if metadata.is_dir() {
-                EntryType::Directory
-            } else if metadata.is_file() {
-                EntryType::File
-            } else {
-                EntryType::Other
+            let Some(raw) = self.build_raw_entry(root, &absolute_path, &metadata, false, warnings)
+            else {
+                continue;
             };
 
-            let size_bytes = if metadata.is_file() {
-                Some(metadata.len())
-            } else {
-                None
-            };
-
-            let modified_at = metadata.modified().ok();
-
-            let rel_path_str = relative_path.to_string_lossy().replace('\\', "/");
-
-            let raw = RawEntry {
-                name,
-                absolute_path: absolute_path.clone(),
-                relative_path: relative_path.clone(),
-                entry_type,
-                size_bytes,
-                modified_at,
-            };
+            let rel_path_str = raw.relative_path.to_string_lossy().replace('\\', "/");
+            let entry_type = raw.entry_type;
             entries.push(raw);
 
             // Recurse into directories (unless ignored and pruning)
-            if metadata.is_dir() && current_depth < max_depth {
+            if entry_type == EntryType::Directory && current_depth < max_depth {
                 let is_ignored = self.is_ignore(&rel_path_str);
                 if is_ignored && !self.include_ignored {
                     // Prune: don't descend into ignored directories
@@ -190,6 +178,71 @@ impl Scanner {
                 );
             }
         }
+    }
+
+    fn build_raw_entry(
+        &self,
+        root: &Path,
+        absolute_path: &Path,
+        metadata: &fs::Metadata,
+        is_root: bool,
+        warnings: &mut Vec<Warning>,
+    ) -> Option<RawEntry> {
+        let relative_path = if is_root {
+            Path::new(".").to_path_buf()
+        } else {
+            absolute_path
+                .strip_prefix(root)
+                .unwrap_or(absolute_path)
+                .to_path_buf()
+        };
+
+        let name = if is_root {
+            absolute_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| ".".to_string())
+        } else {
+            match absolute_path.file_name().and_then(|name| name.to_str()) {
+                Some(name) => name.to_string(),
+                None => {
+                    warnings.push(Warning {
+                        code: "non_utf8_path_skipped".into(),
+                        path: None,
+                        message: "skipped non-UTF-8 path".into(),
+                    });
+                    return None;
+                }
+            }
+        };
+
+        let entry_type = if metadata.is_symlink() {
+            EntryType::Symlink
+        } else if metadata.is_dir() {
+            EntryType::Directory
+        } else if metadata.is_file() {
+            EntryType::File
+        } else {
+            EntryType::Other
+        };
+
+        let size_bytes = if metadata.is_file() {
+            Some(metadata.len())
+        } else {
+            None
+        };
+
+        let modified_at = metadata.modified().ok();
+
+        Some(RawEntry {
+            name,
+            absolute_path: absolute_path.to_path_buf(),
+            relative_path,
+            entry_type,
+            size_bytes,
+            modified_at,
+        })
     }
 
     /// Check if a path matches any ignore pattern (built-in or user).
@@ -218,9 +271,9 @@ mod tests {
 
         let scanner = Scanner::new(&[], false);
         let result = scanner.scan(dir.path(), 0);
-        // Depth 0: target itself only — show the directory entries at depth 0
-        // For a directory target, we see its direct children
+        // Depth 0: only the target itself.
         assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].relative_path.to_string_lossy(), ".");
     }
 
     #[test]
@@ -231,7 +284,15 @@ mod tests {
 
         let scanner = Scanner::new(&[], false);
         let result = scanner.scan(dir.path(), 1);
-        assert_eq!(result.entries.len(), 2);
+        let paths: Vec<_> = result
+            .entries
+            .iter()
+            .map(|e| e.relative_path.to_string_lossy().to_string())
+            .collect();
+        assert!(paths.contains(&".".to_string()));
+        assert!(paths.contains(&"a.txt".to_string()));
+        assert!(paths.contains(&"sub".to_string()));
+        assert_eq!(paths.len(), 3);
     }
 
     #[test]

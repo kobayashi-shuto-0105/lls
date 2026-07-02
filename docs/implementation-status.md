@@ -13,7 +13,7 @@
 - **Next task:** M8-02 — Cross-platform behavior
 - **MVP implementation:** substantially complete (M0-M7 done, M8 hardening in progress)
 - **Blocking issues:** none
-- **Last updated:** 2026-06-12
+- **Last updated:** 2026-07-02
 
 実装状況:
 
@@ -124,6 +124,36 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-07-02 — README and Hugo docs entry cleanup
+
+- Translated the remaining English-heavy README sections into Japanese while keeping command examples intact
+- Added a dedicated `/docs` landing page for Hugo so readers can jump directly to spec, architecture, setup, and implementation status
+- Localized the Hugo site description and top-level menu labels to match the rest of the repository
+- Planned verification: format, targeted content checks, full test suite, and release build
+
+### 2026-07-02 — Human output presentation refresh
+
+- Reworked `--human` output into structured sections: project header, evidence, summary, top entries, next steps, and warnings
+- Added per-entry size display plus `flags` and `why` lines so high-signal context is visible without switching to JSON
+- Added ANSI color accents and emoji badges for section headers, priorities, roles, entry types, actions, and warnings to make terminal output more scannable
+- Updated human-output unit and fixture tests to cover the richer presentation
+- Planned verification: format, targeted tests, full test suite, clippy, and release build
+
+### 2026-07-01 — Depth semantics aligned with spec
+
+- Fixed scanner depth handling so `depth 0` returns only the target entry and deeper values count from that root
+- Added a dedicated raw-entry builder for the target path so directory scans include `.` at depth 0 without breaking child path normalization
+- Updated scanner unit tests and fixture integration tests to cover `depth 0/1/2/3` progression against the spec-defined behavior
+- Verified targeted depth tests before running the broader verification suite
+
+### 2026-06-26 — Codex app-server setup timeout hardening
+
+- Investigated `lls setup` timeouts against the Codex app-server path
+- Verified raw app-server protocol: `turn/start` returns `status: inProgress`, then streams `item/completed` and `turn/completed`
+- Updated setup turn handling to read final agent output from `turn.items` as well as item notifications
+- Increased setup turn timeout to 300s and made timeout errors include captured app-server stderr
+- `cargo test` passing after the change
 
 ### 2026-06-12 — M5-M8 hardening (PR #9)
 
