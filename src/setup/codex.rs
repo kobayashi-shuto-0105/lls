@@ -17,7 +17,11 @@ pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppErro
 
     // Build the exec request
     let schema_path = std::path::PathBuf::from("/dev/null"); // In practice, use embedded schema
-    let output_path = project_root.join(".lls").join(".codex-output.tmp");
+
+    // Use system temp directory for Codex output.
+    // This ensures the output path exists even on first-time setup when .lls/ doesn't exist yet.
+    let output_path =
+        std::env::temp_dir().join(format!(".lls-codex-output-{}.tmp", std::process::id()));
 
     let cmd = crate::codex::build_codex_command(
         "codex",
@@ -226,5 +230,26 @@ mod tests {
         };
         let result = runner.run(request);
         assert!(matches!(result, Err(crate::codex::ProcessError::NotFound)));
+    }
+
+    #[test]
+    fn test_codex_output_path_uses_system_temp() {
+        // Verify that the Codex output path is in the system temp directory,
+        // not in the project's .lls/ directory (which may not exist on first setup).
+        let output_path =
+            std::env::temp_dir().join(format!(".lls-codex-output-{}.tmp", std::process::id()));
+
+        // Path should be in the system temp directory
+        assert!(
+            output_path.starts_with(std::env::temp_dir()),
+            "Codex output should use system temp directory"
+        );
+
+        // Path should NOT be under any project's .lls directory
+        let path_str = output_path.to_string_lossy();
+        assert!(
+            !path_str.contains(".lls/"),
+            "Codex output path should not be under .lls/"
+        );
     }
 }
