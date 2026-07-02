@@ -237,4 +237,33 @@ mod tests {
         let result = runner.run(request);
         assert!(matches!(result, Err(crate::codex::ProcessError::NotFound)));
     }
+
+    #[test]
+    fn test_schema_temp_file_cleanup_on_codex_not_found() {
+        // This test verifies that the schema temp file is cleaned up
+        // even when Codex fails (e.g., not found).
+        // We test this by checking that after calling run_codex_setup on a temp dir
+        // (which will fail because codex is not installed), no .codex-schema.tmp.* files remain.
+
+        let dir = tempfile::tempdir().unwrap();
+        let lls_dir = dir.path().join(".lls");
+
+        // Attempt setup - will fail because codex is not installed
+        let result = run_codex_setup(dir.path());
+        assert!(result.is_err());
+
+        // The .lls directory should exist (created for temp file)
+        if lls_dir.exists() {
+            // Check no schema temp files remain
+            for entry in std::fs::read_dir(&lls_dir).unwrap() {
+                let entry = entry.unwrap();
+                let name = entry.file_name().to_string_lossy().to_string();
+                assert!(
+                    !name.starts_with(".codex-schema.tmp"),
+                    "orphaned schema temp file found: {}",
+                    name
+                );
+            }
+        }
+    }
 }

@@ -10,6 +10,9 @@ pub const CONFIG_SCHEMA_JSON: &str = include_str!("../../.github/assets/config.s
 /// Write the embedded schema to a temporary file and return the path.
 ///
 /// The caller is responsible for cleaning up the file after use.
+///
+/// Note: If the process crashes before cleanup, orphaned `.codex-schema.tmp.*` files
+/// may remain in the `.lls/` directory. These are harmless and can be manually removed.
 pub fn write_schema_temp_file(project_root: &Path) -> Result<PathBuf, std::io::Error> {
     let lls_dir = project_root.join(".lls");
 
