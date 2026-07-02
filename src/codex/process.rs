@@ -69,9 +69,10 @@ pub fn run_process_with_timeout(
         }
     })?;
 
-    // Take ownership of stdout/stderr handles before spawning wait thread
-    let stdout_handle = child.stdout.take();
-    let stderr_handle = child.stderr.take();
+    // Start draining stdout/stderr immediately so chatty subprocesses do not
+    // block on a full pipe and get misclassified as timeouts.
+    let stdout_thread = child.stdout.take().map(spawn_reader_thread);
+    let stderr_thread = child.stderr.take().map(spawn_reader_thread);
 
     // Use Arc<Mutex<>> to share the Child handle with the timeout handler
     let child = Arc::new(Mutex::new(Some(child)));
@@ -98,9 +99,8 @@ pub fn run_process_with_timeout(
         Ok(status_result) => {
             let status = status_result.map_err(|e| ProcessError::Io(e.to_string()))?;
 
-            // Read stdout and stderr after process completes
-            let stdout = read_handle(stdout_handle);
-            let stderr = read_handle(stderr_handle);
+            let stdout = join_reader_thread(stdout_thread)?;
+            let stderr = join_reader_thread(stderr_thread)?;
 
             Ok(ProcessResult {
                 exit_code: status.code().unwrap_or(-1),
@@ -119,6 +119,8 @@ pub fn run_process_with_timeout(
                 // Wait to reap the zombie process
                 let _ = c.wait();
             }
+            let _ = join_reader_thread(stdout_thread);
+            let _ = join_reader_thread(stderr_thread);
             Err(ProcessError::Timeout)
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -130,15 +132,21 @@ pub fn run_process_with_timeout(
     }
 }
 
-/// Read all content from an optional handle, returning empty string if None.
-fn read_handle(handle: Option<impl Read>) -> String {
-    match handle {
-        Some(mut h) => {
-            let mut buf = Vec::new();
-            let _ = h.read_to_end(&mut buf);
-            String::from_utf8_lossy(&buf).to_string()
-        }
-        None => String::new(),
+fn spawn_reader_thread(mut handle: impl Read + Send + 'static) -> thread::JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = handle.read_to_end(&mut buf);
+        buf
+    })
+}
+
+fn join_reader_thread(reader: Option<thread::JoinHandle<Vec<u8>>>) -> Result<String, ProcessError> {
+    match reader {
+        Some(handle) => handle
+            .join()
+            .map(|buf| String::from_utf8_lossy(&buf).to_string())
+            .map_err(|_| ProcessError::Io("process output reader thread panicked".into())),
+        None => Ok(String::new()),
     }
 }
 
@@ -246,5 +254,22 @@ mod tests {
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.stderr.contains("error"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_real_process_large_stdout_does_not_timeout() {
+        let result = run_process_with_timeout(
+            "sh",
+            &[
+                "-c".into(),
+                "python3 -c 'import sys; sys.stdout.write(\"x\" * 200000)'".into(),
+            ],
+            Duration::from_secs(5),
+        );
+        assert!(result.is_ok(), "expected success, got {:?}", result);
+        let output = result.unwrap();
+        assert_eq!(output.exit_code, 0);
+        assert_eq!(output.stdout.len(), 200000);
     }
 }
