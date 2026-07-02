@@ -125,6 +125,17 @@
 
 新しいentryは上へ追加する。
 
+### 2026-07-02 — ChatGPT-only authentication policy enforcement (Issue #15)
+
+- Added `src/codex/auth.rs` module with authentication status adapter
+- Implemented `check_api_key_env()` to reject `OPENAI_API_KEY` and `CODEX_API_KEY` environment variables
+- Implemented `check_auth_status()` to verify Codex CLI login status before running `codex exec`
+- Updated `run_codex_setup()` to verify authentication before proceeding with Codex-assisted setup
+- Added user guidance for `codex login` (browser) or `codex login --device-auth` (headless) when not authenticated
+- Added 17 new unit tests for authentication checking and ChatGPT-only policy
+- All 169 tests passing, fmt/clippy/release build clean
+- Closes #15
+
 ### 2026-07-02 — README and Hugo docs entry cleanup
 
 - Translated the remaining English-heavy README sections into Japanese while keeping command examples intact

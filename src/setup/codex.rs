@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::codex::{ProcessError, ProcessRequest, ProcessRunner};
+use crate::codex::{ProcessError, ProcessRequest, ProcessRunner, check_auth_status};
 use crate::config::validate_config;
 use crate::error::AppError;
 
@@ -12,10 +12,27 @@ pub struct ValidatedCodexOutput {
 }
 
 /// Run Codex-assisted setup and return the raw JSON output.
+///
+/// This function enforces the ChatGPT-only authentication policy:
+/// 1. Rejects API key environment variables (OPENAI_API_KEY, CODEX_API_KEY)
+/// 2. Verifies Codex CLI is logged in via ChatGPT
+/// 3. Runs Codex exec in read-only/ephemeral mode
 pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppError> {
     let runner = RealCodexRunner;
 
-    // Build the exec request
+    // Step 1: Verify authentication status (ChatGPT-only policy)
+    // This checks for rejected API key env vars and verifies Codex login
+    match check_auth_status(&runner) {
+        Ok(_) => {
+            // Logged in via ChatGPT - proceed
+        }
+        Err(auth_err) => {
+            // Authentication check failed
+            return Err(AppError::Codex(auth_err.guidance));
+        }
+    }
+
+    // Step 2: Build the exec request
     let schema_path = std::path::PathBuf::from("/dev/null"); // In practice, use embedded schema
     let output_path = project_root.join(".lls").join(".codex-output.tmp");
 
@@ -37,14 +54,14 @@ pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppErro
         timeout: Duration::from_secs(120),
     };
 
-    // Run Codex
+    // Step 3: Run Codex
     runner.run(request).map_err(map_codex_error)?;
 
-    // Read output from the temporary file
+    // Step 4: Read output from the temporary file
     let output = std::fs::read_to_string(&output_path)
         .map_err(|_| AppError::Codex("Codex did not write output file".into()))?;
 
-    // Clean up temp file
+    // Step 5: Clean up temp file
     let _ = std::fs::remove_file(&output_path);
 
     Ok(output)
@@ -226,5 +243,96 @@ mod tests {
         };
         let result = runner.run(request);
         assert!(matches!(result, Err(crate::codex::ProcessError::NotFound)));
+    }
+
+    // Tests for ChatGPT-only authentication policy
+
+    #[test]
+    fn test_chatgpt_only_auth_policy_rejects_openai_api_key() {
+        // Ensure the check_api_key_env function rejects OPENAI_API_KEY
+        // SAFETY: Tests run in isolation; we clean up after ourselves.
+        unsafe {
+            std::env::set_var("OPENAI_API_KEY", "sk-test-key");
+        }
+        let result = crate::codex::check_api_key_env();
+        // SAFETY: Clean up
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+        }
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.guidance.contains("OPENAI_API_KEY"));
+        assert!(err.guidance.contains("not supported"));
+    }
+
+    #[test]
+    fn test_chatgpt_only_auth_policy_rejects_codex_api_key() {
+        // Ensure the check_api_key_env function rejects CODEX_API_KEY
+        // SAFETY: Tests run in isolation; we clean up after ourselves.
+        unsafe {
+            std::env::set_var("CODEX_API_KEY", "test-key");
+        }
+        let result = crate::codex::check_api_key_env();
+        // SAFETY: Clean up
+        unsafe {
+            std::env::remove_var("CODEX_API_KEY");
+        }
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.guidance.contains("CODEX_API_KEY"));
+    }
+
+    #[test]
+    fn test_chatgpt_only_auth_policy_accepts_no_api_key() {
+        // When no API key env vars are set, check should pass
+        // SAFETY: Tests run in isolation; we clean up after ourselves.
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("CODEX_API_KEY");
+        }
+        let result = crate::codex::check_api_key_env();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_auth_check_guides_to_codex_login() {
+        // SAFETY: Tests run in isolation; we clean up after ourselves.
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("CODEX_API_KEY");
+        }
+
+        // Simulate "not logged in" response from Codex
+        let runner = crate::codex::FakeProcessRunner::new(Ok(crate::codex::ProcessResult {
+            exit_code: 1,
+            stdout: "Not logged in".to_string(),
+            stderr: String::new(),
+        }));
+
+        let result = crate::codex::check_auth_status(&runner);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.guidance.contains("codex login"));
+    }
+
+    #[test]
+    fn test_auth_check_accepts_chatgpt_login() {
+        // SAFETY: Tests run in isolation; we clean up after ourselves.
+        unsafe {
+            std::env::remove_var("OPENAI_API_KEY");
+            std::env::remove_var("CODEX_API_KEY");
+        }
+
+        // Simulate successful ChatGPT login
+        let runner = crate::codex::FakeProcessRunner::new(Ok(crate::codex::ProcessResult {
+            exit_code: 0,
+            stdout: "Logged in via ChatGPT".to_string(),
+            stderr: String::new(),
+        }));
+
+        let result = crate::codex::check_auth_status(&runner);
+        assert!(result.is_ok());
     }
 }
