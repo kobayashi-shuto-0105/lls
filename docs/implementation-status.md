@@ -128,13 +128,20 @@
 ### 2026-07-02 — ChatGPT-only authentication policy enforcement (Issue #15)
 
 - Added `src/codex/auth.rs` module with authentication status adapter
-- Implemented `check_api_key_env()` to reject `OPENAI_API_KEY` and `CODEX_API_KEY` environment variables
-- Implemented `check_auth_status()` to verify Codex CLI login status before running `codex exec`
-- Updated `run_codex_setup()` to verify authentication before proceeding with Codex-assisted setup
-- Added user guidance for `codex login` (browser) or `codex login --device-auth` (headless) when not authenticated
-- Added 17 new unit tests for authentication checking and ChatGPT-only policy
-- All 169 tests passing, fmt/clippy/release build clean
+- Implemented `check_auth_status()` using `codex login status` before running `codex exec`
+- Enforced ChatGPT-only setup flow through Codex CLI status parsing without reading credential files or API-key environment variables
+- Updated `run_codex_setup()` to stop early with login guidance when no ChatGPT session is available
+- Added user guidance for `codex login` and `codex login --device-auth`
+- Added unit tests for authentication status parsing and unsupported-auth handling
 - Closes #15
+
+### 2026-07-02 — Codex subprocess timeout implementation
+
+- Implemented timeout enforcement in `src/codex/process.rs` using thread-based wait with channel timeout
+- Updated `RealCodexRunner` in `src/setup/codex.rs` to use shared `run_process_with_timeout` function
+- Added unit tests for real process timeout, success, not-found, and stderr capture
+- Added tests verifying timeout maps to exit code 6 (Codex/setup failure)
+- Fixes #13: `lls setup` no longer hangs indefinitely if Codex subprocess does not respond
 
 ### 2026-07-02 — README and Hugo docs entry cleanup
 

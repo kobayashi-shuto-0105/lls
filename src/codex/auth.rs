@@ -1,10 +1,8 @@
 //! Authentication status adapter for Codex CLI.
 //!
-//! This module provides functionality to check Codex authentication status
-//! and enforce the ChatGPT-only authentication policy defined in the spec.
-//!
-//! The MVP supports only "Sign in with ChatGPT" authentication.
-//! API key-based authentication (OPENAI_API_KEY, CODEX_API_KEY) is explicitly rejected.
+//! `lls` does not read credential files or API-key environment variables.
+//! Instead, it asks the Codex CLI whether the current session is logged in
+//! with ChatGPT before running `codex exec` during setup.
 
 use crate::codex::{ProcessError, ProcessRequest, ProcessRunner};
 use std::time::Duration;
@@ -14,13 +12,13 @@ use std::time::Duration;
 pub enum AuthStatus {
     /// Authenticated via ChatGPT login.
     LoggedIn,
-    /// Not logged in (no valid session).
+    /// No Codex session is available.
     NotLoggedIn,
-    /// API key environment variable detected (not supported).
-    ApiKeyDetected { var_name: String },
-    /// Codex CLI not found.
+    /// Codex is authenticated, but not with the supported ChatGPT method.
+    UnsupportedAuthMethod,
+    /// Codex CLI is not installed.
     CodexNotFound,
-    /// Unknown status (could not determine).
+    /// The status could not be determined safely.
     Unknown { message: String },
 }
 
@@ -32,31 +30,17 @@ pub struct AuthCheckError {
 }
 
 impl AuthCheckError {
-    fn api_key(var_name: &str) -> Self {
+    fn not_logged_in() -> Self {
         Self {
-            status: AuthStatus::ApiKeyDetected {
-                var_name: var_name.to_string(),
-            },
-            guidance: format!(
-                "API key authentication is not supported. \
-                 Please unset {var_name} and use `codex login` to sign in with ChatGPT."
-            ),
+            status: AuthStatus::NotLoggedIn,
+            guidance: "Codex CLI is not logged in with ChatGPT. Run `codex login` to sign in. In headless environments, use `codex login --device-auth`.".to_string(),
         }
     }
 
-    fn not_logged_in(is_headless: bool) -> Self {
-        let guidance = if is_headless {
-            "Codex CLI is not logged in. \
-             Run `codex login --device-auth` to authenticate in a headless environment."
-                .to_string()
-        } else {
-            "Codex CLI is not logged in. \
-             Run `codex login` to sign in with ChatGPT."
-                .to_string()
-        };
+    fn unsupported_auth_method() -> Self {
         Self {
-            status: AuthStatus::NotLoggedIn,
-            guidance,
+            status: AuthStatus::UnsupportedAuthMethod,
+            guidance: "Codex CLI must be authenticated with ChatGPT for `lls setup`. Run `codex logout`, then `codex login`. In headless environments, use `codex login --device-auth`.".to_string(),
         }
     }
 
@@ -68,115 +52,94 @@ impl AuthCheckError {
         }
     }
 
-    fn unknown(message: &str) -> Self {
+    fn unknown(message: impl Into<String>) -> Self {
+        let message = message.into();
         Self {
             status: AuthStatus::Unknown {
-                message: message.to_string(),
+                message: message.clone(),
             },
             guidance: format!(
-                "Could not determine Codex authentication status: {message}. \
-                 Try running `codex auth status` manually."
+                "Could not determine Codex authentication status ({message}). Run `codex login status` manually."
             ),
         }
     }
 }
 
-/// Environment variable names that indicate API key authentication.
-const REJECTED_ENV_VARS: &[&str] = &["OPENAI_API_KEY", "CODEX_API_KEY"];
-
-/// Check for rejected API key environment variables.
-///
-/// Returns `Err` if any API key environment variable is set.
-pub fn check_api_key_env() -> Result<(), AuthCheckError> {
-    for var_name in REJECTED_ENV_VARS {
-        if std::env::var(var_name).is_ok() {
-            return Err(AuthCheckError::api_key(var_name));
-        }
-    }
-    Ok(())
-}
-
-/// Check Codex authentication status using the Codex CLI.
-///
-/// This function:
-/// 1. Rejects API key environment variables
-/// 2. Runs `codex auth status` to check if logged in
-/// 3. Returns `Ok(AuthStatus::LoggedIn)` only if ChatGPT login is active
+/// Check Codex authentication status using `codex login status`.
 pub fn check_auth_status<R: ProcessRunner>(runner: &R) -> Result<AuthStatus, AuthCheckError> {
-    // First, check for rejected environment variables
-    check_api_key_env()?;
-
-    // Run `codex auth status` to check login status
     let request = ProcessRequest {
         command: "codex".to_string(),
-        args: vec!["auth".to_string(), "status".to_string()],
+        args: vec!["login".to_string(), "status".to_string()],
         timeout: Duration::from_secs(10),
     };
 
     match runner.run(request) {
-        Ok(result) => {
-            // Parse the output to determine authentication status
-            // Expected output patterns:
-            // - "Logged in" / "authenticated" / "chatgpt" -> LoggedIn
-            // - "Not logged in" / "unauthenticated" -> NotLoggedIn
-            let stdout_lower = result.stdout.to_lowercase();
-            let stderr_lower = result.stderr.to_lowercase();
-            let combined = format!("{stdout_lower} {stderr_lower}");
-
-            // Check for NOT logged in patterns FIRST (before positive patterns)
-            // because "not logged in" contains "logged in"
-            if combined.contains("not logged in")
-                || combined.contains("unauthenticated")
-                || combined.contains("not authenticated")
-                || combined.contains("no session")
-                || combined.contains("please login")
-                || combined.contains("please sign in")
-            {
-                let is_headless = is_headless_environment();
-                Err(AuthCheckError::not_logged_in(is_headless))
-            } else if combined.contains("logged in")
-                || combined.contains("authenticated")
-                || combined.contains("chatgpt")
-                || combined.contains("signed in")
-            {
-                Ok(AuthStatus::LoggedIn)
-            } else if result.exit_code == 0 {
-                // Exit code 0 but unclear output - assume logged in
-                Ok(AuthStatus::LoggedIn)
-            } else {
-                // Non-zero exit with unclear output
-                Err(AuthCheckError::unknown(&format!(
-                    "codex auth status returned exit code {}",
-                    result.exit_code
-                )))
-            }
-        }
+        Ok(result) => parse_auth_status_result(&result.stdout, &result.stderr, result.exit_code),
         Err(ProcessError::NotFound) => Err(AuthCheckError::codex_not_found()),
-        Err(ProcessError::Timeout) => Err(AuthCheckError::unknown("codex auth status timed out")),
-        Err(ProcessError::NonZeroExit { code, stderr }) => {
-            let stderr_lower = stderr.to_lowercase();
-            if stderr_lower.contains("not logged in")
-                || stderr_lower.contains("unauthenticated")
-                || stderr_lower.contains("not authenticated")
-                || stderr_lower.contains("please login")
-                || stderr_lower.contains("please sign in")
-            {
-                let is_headless = is_headless_environment();
-                Err(AuthCheckError::not_logged_in(is_headless))
-            } else {
-                Err(AuthCheckError::unknown(&format!(
-                    "codex auth status exited with code {code}"
-                )))
-            }
+        Err(ProcessError::Timeout) => {
+            Err(AuthCheckError::unknown("`codex login status` timed out"))
         }
-        Err(ProcessError::Io(msg)) => Err(AuthCheckError::unknown(&format!("I/O error: {msg}"))),
+        Err(ProcessError::NonZeroExit { code, stderr }) => {
+            parse_auth_status_result("", &stderr, code)
+        }
+        Err(ProcessError::Io(_)) => Err(AuthCheckError::unknown(
+            "`codex login status` failed with an I/O error",
+        )),
     }
 }
 
-/// Check if the current environment appears to be headless (no display).
-fn is_headless_environment() -> bool {
-    // Check common environment variables that indicate a display is available
-    std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err()
+fn parse_auth_status_result(
+    stdout: &str,
+    stderr: &str,
+    exit_code: i32,
+) -> Result<AuthStatus, AuthCheckError> {
+    let combined = format!("{} {}", stdout.to_lowercase(), stderr.to_lowercase());
+
+    if is_chatgpt_logged_in(&combined) {
+        return Ok(AuthStatus::LoggedIn);
+    }
+
+    if indicates_unsupported_auth_method(&combined) {
+        return Err(AuthCheckError::unsupported_auth_method());
+    }
+
+    if indicates_logged_out(&combined) {
+        return Err(AuthCheckError::not_logged_in());
+    }
+
+    if exit_code == 0 {
+        return Err(AuthCheckError::unknown(
+            "`codex login status` returned an unrecognized success response",
+        ));
+    }
+
+    Err(AuthCheckError::unknown(format!(
+        "`codex login status` exited with code {exit_code}"
+    )))
+}
+
+fn is_chatgpt_logged_in(output: &str) -> bool {
+    (output.contains("chatgpt") || output.contains("chat gpt"))
+        && (output.contains("logged in")
+            || output.contains("signed in")
+            || output.contains("using")
+            || output.contains("authenticated"))
+}
+
+fn indicates_unsupported_auth_method(output: &str) -> bool {
+    output.contains("api key")
+        || output.contains("access token")
+        || output.contains("logged in using api")
+        || output.contains("logged in using access token")
+}
+
+fn indicates_logged_out(output: &str) -> bool {
+    output.contains("not logged in")
+        || output.contains("not authenticated")
+        || output.contains("unauthenticated")
+        || output.contains("no session")
+        || output.contains("please login")
+        || output.contains("please sign in")
 }
 
 #[cfg(test)]
@@ -184,71 +147,42 @@ mod tests {
     use super::*;
     use crate::codex::{FakeProcessRunner, ProcessResult};
 
-    #[test]
-    fn test_api_key_env_not_set() {
-        // Temporarily ensure env vars are not set
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
+    struct AssertingRunner {
+        result: Result<ProcessResult, ProcessError>,
+    }
+
+    impl ProcessRunner for AssertingRunner {
+        fn run(&self, request: ProcessRequest) -> Result<ProcessResult, ProcessError> {
+            assert_eq!(request.command, "codex");
+            assert_eq!(
+                request.args,
+                vec!["login".to_string(), "status".to_string()]
+            );
+            assert_eq!(request.timeout, Duration::from_secs(10));
+            self.result.clone()
         }
-        assert!(check_api_key_env().is_ok());
     }
 
     #[test]
-    fn test_api_key_env_openai_set() {
-        // Set the env var for this test
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::set_var("OPENAI_API_KEY", "sk-test-key");
-        }
-        let result = check_api_key_env();
-        // SAFETY: Clean up
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-        }
+    fn test_check_auth_status_uses_login_status_command() {
+        let runner = AssertingRunner {
+            result: Ok(ProcessResult {
+                exit_code: 0,
+                stdout: "Logged in using ChatGPT".to_string(),
+                stderr: String::new(),
+            }),
+        };
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(
-            err.status,
-            AuthStatus::ApiKeyDetected { var_name } if var_name == "OPENAI_API_KEY"
-        ));
-        assert!(err.guidance.contains("OPENAI_API_KEY"));
+        let result = check_auth_status(&runner);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), AuthStatus::LoggedIn);
     }
 
     #[test]
-    fn test_api_key_env_codex_set() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::set_var("CODEX_API_KEY", "test-key");
-        }
-        let result = check_api_key_env();
-        // SAFETY: Clean up
-        unsafe {
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(
-            err.status,
-            AuthStatus::ApiKeyDetected { var_name } if var_name == "CODEX_API_KEY"
-        ));
-    }
-
-    #[test]
-    fn test_check_auth_status_logged_in() {
-        // Ensure no API key env vars
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
+    fn test_check_auth_status_logged_in_with_chatgpt() {
         let runner = FakeProcessRunner::new(Ok(ProcessResult {
             exit_code: 0,
-            stdout: "Logged in as user@example.com via ChatGPT".to_string(),
+            stdout: "Logged in using ChatGPT".to_string(),
             stderr: String::new(),
         }));
 
@@ -258,32 +192,22 @@ mod tests {
     }
 
     #[test]
-    fn test_check_auth_status_authenticated() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
+    fn test_check_auth_status_rejects_api_key_login() {
         let runner = FakeProcessRunner::new(Ok(ProcessResult {
             exit_code: 0,
-            stdout: "Authenticated".to_string(),
+            stdout: "Logged in using API key".to_string(),
             stderr: String::new(),
         }));
 
         let result = check_auth_status(&runner);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), AuthStatus::LoggedIn);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.status, AuthStatus::UnsupportedAuthMethod);
+        assert!(err.guidance.contains("codex logout"));
     }
 
     #[test]
     fn test_check_auth_status_not_logged_in() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
         let runner = FakeProcessRunner::new(Ok(ProcessResult {
             exit_code: 1,
             stdout: "Not logged in".to_string(),
@@ -295,108 +219,56 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.status, AuthStatus::NotLoggedIn);
         assert!(err.guidance.contains("codex login"));
+        assert!(err.guidance.contains("device-auth"));
     }
 
     #[test]
-    fn test_check_auth_status_please_login() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
+    fn test_check_auth_status_not_logged_in_from_stderr() {
         let runner = FakeProcessRunner::new(Err(ProcessError::NonZeroExit {
             code: 1,
-            stderr: "Please login first".to_string(),
+            stderr: "Please sign in with ChatGPT".to_string(),
         }));
 
         let result = check_auth_status(&runner);
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.status, AuthStatus::NotLoggedIn);
+        assert_eq!(result.unwrap_err().status, AuthStatus::NotLoggedIn);
     }
 
     #[test]
     fn test_check_auth_status_codex_not_found() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
         let runner = FakeProcessRunner::new(Err(ProcessError::NotFound));
 
         let result = check_auth_status(&runner);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.status, AuthStatus::CodexNotFound);
-        assert!(err.guidance.contains("Codex CLI not found"));
+        assert!(err.guidance.contains("without-codex"));
     }
 
     #[test]
     fn test_check_auth_status_timeout() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
         let runner = FakeProcessRunner::new(Err(ProcessError::Timeout));
 
         let result = check_auth_status(&runner);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err.status, AuthStatus::Unknown { .. }));
+        assert!(err.guidance.contains("codex login status"));
     }
 
     #[test]
-    fn test_check_auth_status_with_api_key_env() {
-        // API key env var should be rejected before running codex
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::set_var("OPENAI_API_KEY", "sk-test");
-        }
-
+    fn test_check_auth_status_unknown_success_output_is_error() {
         let runner = FakeProcessRunner::new(Ok(ProcessResult {
             exit_code: 0,
-            stdout: "Logged in".to_string(),
+            stdout: "Session active".to_string(),
             stderr: String::new(),
         }));
 
         let result = check_auth_status(&runner);
-        // SAFETY: Clean up
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-        }
-
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(matches!(err.status, AuthStatus::ApiKeyDetected { .. }));
-    }
-
-    #[test]
-    fn test_check_auth_status_exit_code_0_unclear_output() {
-        // SAFETY: Tests run in isolation; we clean up after ourselves.
-        unsafe {
-            std::env::remove_var("OPENAI_API_KEY");
-            std::env::remove_var("CODEX_API_KEY");
-        }
-
-        // Exit code 0 with unclear output should assume logged in
-        let runner = FakeProcessRunner::new(Ok(ProcessResult {
-            exit_code: 0,
-            stdout: "session active".to_string(),
-            stderr: String::new(),
-        }));
-
-        let result = check_auth_status(&runner);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), AuthStatus::LoggedIn);
-    }
-
-    #[test]
-    fn test_rejected_env_vars_list() {
-        assert!(REJECTED_ENV_VARS.contains(&"OPENAI_API_KEY"));
-        assert!(REJECTED_ENV_VARS.contains(&"CODEX_API_KEY"));
+        assert!(matches!(
+            result.unwrap_err().status,
+            AuthStatus::Unknown { .. }
+        ));
     }
 }
