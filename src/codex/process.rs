@@ -56,6 +56,8 @@ pub fn run_process_with_timeout(
     args: &[String],
     timeout: Duration,
 ) -> Result<ProcessResult, ProcessError> {
+    use std::sync::{Arc, Mutex};
+
     let mut cmd = std::process::Command::new(command);
     cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -68,17 +70,25 @@ pub fn run_process_with_timeout(
     })?;
 
     // Take ownership of stdout/stderr handles before spawning wait thread
-    let mut stdout_handle = child.stdout.take();
-    let mut stderr_handle = child.stderr.take();
+    let stdout_handle = child.stdout.take();
+    let stderr_handle = child.stderr.take();
+
+    // Use Arc<Mutex<>> to share the Child handle with the timeout handler
+    let child = Arc::new(Mutex::new(Some(child)));
+    let child_for_timeout = Arc::clone(&child);
 
     // Use a channel to communicate completion from a background thread
     let (tx, rx) = mpsc::channel();
 
     // Spawn a thread to wait for the child process
     thread::spawn(move || {
-        let status = child.wait();
-        // Send result; ignore send error if receiver dropped (timeout case)
-        let _ = tx.send(status);
+        // Take the child from the mutex
+        let mut guard = child.lock().expect("mutex poisoned");
+        if let Some(mut c) = guard.take() {
+            let status = c.wait();
+            // Send result; ignore send error if receiver dropped (timeout case)
+            let _ = tx.send(status);
+        }
     });
 
     // Wait for the child with timeout
@@ -87,8 +97,8 @@ pub fn run_process_with_timeout(
             let status = status_result.map_err(|e| ProcessError::Io(e.to_string()))?;
 
             // Read stdout and stderr after process completes
-            let stdout = read_handle(&mut stdout_handle);
-            let stderr = read_handle(&mut stderr_handle);
+            let stdout = read_handle(stdout_handle);
+            let stderr = read_handle(stderr_handle);
 
             Ok(ProcessResult {
                 exit_code: status.code().unwrap_or(-1),
@@ -97,9 +107,14 @@ pub fn run_process_with_timeout(
             })
         }
         Err(mpsc::RecvTimeoutError::Timeout) => {
-            // Timeout reached - the child process is still running
-            // The thread will eventually complete and clean up the process
-            // when it exits, but we return Timeout immediately
+            // Timeout reached - kill the child process to prevent resource leaks
+            let mut guard = child_for_timeout.lock().expect("mutex poisoned");
+            if let Some(mut c) = guard.take() {
+                // Best-effort kill; ignore errors (process may have already exited)
+                let _ = c.kill();
+                // Wait to reap the zombie process
+                let _ = c.wait();
+            }
             Err(ProcessError::Timeout)
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -112,8 +127,8 @@ pub fn run_process_with_timeout(
 }
 
 /// Read all content from an optional handle, returning empty string if None.
-fn read_handle(handle: &mut Option<impl Read>) -> String {
-    match handle.take() {
+fn read_handle(handle: Option<impl Read>) -> String {
+    match handle {
         Some(mut h) => {
             let mut buf = Vec::new();
             let _ = h.read_to_end(&mut buf);
