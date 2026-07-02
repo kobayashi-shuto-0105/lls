@@ -24,7 +24,10 @@ pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppErro
     let schema_path = write_schema_temp_file(project_root)
         .map_err(|e| AppError::Codex(format!("cannot write schema temp file: {e}")))?;
 
-    let output_path = project_root.join(".lls").join(".codex-output.tmp");
+    // Use system temp directory for Codex output so first-time setup does not
+    // depend on `.lls/` already existing inside the project root.
+    let output_path =
+        std::env::temp_dir().join(format!(".lls-codex-output-{}.tmp", std::process::id()));
 
     let cmd = crate::codex::build_codex_command(
         "codex",
@@ -358,6 +361,20 @@ mod tests {
             let app_err = map_codex_error(e);
             assert_eq!(app_err.exit_code(), 6);
         }
+    }
+
+    #[test]
+    fn test_codex_output_path_uses_system_temp() {
+        let output_path =
+            std::env::temp_dir().join(format!(".lls-codex-output-{}.tmp", std::process::id()));
+
+        assert!(
+            output_path.starts_with(std::env::temp_dir()),
+            "Codex output should use system temp directory"
+        );
+
+        let has_lls_dir = output_path.components().any(|c| c.as_os_str() == ".lls");
+        assert!(!has_lls_dir, "Codex output path should not be under .lls/");
     }
 
     #[test]
