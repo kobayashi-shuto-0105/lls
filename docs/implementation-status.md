@@ -13,7 +13,7 @@
 - **Next task:** M8-02 — Cross-platform behavior
 - **MVP implementation:** substantially complete (M0-M7 done, M8 hardening in progress)
 - **Blocking issues:** none
-- **Last updated:** 2026-07-01
+- **Last updated:** 2026-07-02
 
 実装状況:
 
@@ -124,6 +124,13 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-07-02 — Human output presentation refresh
+
+- Reworked `--human` output into structured sections: project header, evidence, summary, top entries, next steps, and warnings
+- Added per-entry size display plus `flags` and `why` lines so high-signal context is visible without switching to JSON
+- Updated human-output unit and fixture tests to cover the richer presentation
+- Planned verification: format, targeted tests, full test suite, clippy, and release build
 
 ### 2026-07-01 — Depth semantics aligned with spec
 

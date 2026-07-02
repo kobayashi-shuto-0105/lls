@@ -375,6 +375,8 @@ fn test_human_output() {
     assert!(output.status.success(), "human output should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("lls —"));
+    assert!(stdout.contains("Summary"));
+    assert!(stdout.contains("Top entries"));
     assert!(stdout.contains("Cargo.toml"));
 }
 

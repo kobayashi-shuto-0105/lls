@@ -4,38 +4,49 @@ use crate::model::*;
 pub fn to_human_string(doc: &OutputDocument) -> String {
     let mut out = String::new();
 
-    // Header
     out.push_str(&format!("lls — {}\n", doc.path));
     out.push_str(&format!(
-        "Project type: {} (confidence: {:.2})\n",
+        "Project: {} (confidence {:.2})\n",
         doc.project_type.name, doc.project_type.confidence
     ));
+    if !doc.project_type.evidence.is_empty() {
+        out.push_str(&format!(
+            "Evidence: {}\n",
+            doc.project_type.evidence.join(", ")
+        ));
+    }
     out.push('\n');
 
-    // Summary
+    out.push_str("Summary\n");
     out.push_str(&format!(
-        "{} entries ({} shown, {} important, {} ignored)\n\n",
+        "  entries: {} total | {} shown | {} important | {} ignored\n",
         doc.summary.total_entries,
         doc.summary.shown_entries,
         doc.summary.important_entries,
         doc.summary.ignored_entries,
     ));
+    out.push_str(&format!(
+        "  signals: {} next steps | {} warnings\n",
+        doc.recommended_next_steps.len(),
+        doc.warnings.len()
+    ));
+    out.push('\n');
 
-    // Entries (first 20)
-    for entry in doc.entries.iter().take(20) {
-        let marker = if entry.generated && entry.sensitive {
-            " [generated, sensitive]"
-        } else if entry.generated {
-            " [generated]"
-        } else if entry.sensitive {
-            " [sensitive]"
-        } else {
-            ""
-        };
+    out.push_str("Top entries\n");
+    for (index, entry) in doc.entries.iter().take(20).enumerate() {
         out.push_str(&format!(
-            "  [{:<8}] [{:<15}] {}{}\n",
-            entry.priority, entry.role, entry.path, marker
+            "  {:>2}. {:<8} | {:<16} | {:<9} | {:>8} | {}\n",
+            index + 1,
+            entry.priority,
+            humanize(&entry.role),
+            entry.entry_type,
+            format_size(entry.size_bytes),
+            entry.path
         ));
+        if entry.generated || entry.sensitive {
+            out.push_str(&format!("      flags: {}\n", format_flags(entry)));
+        }
+        out.push_str(&format!("      why: {}\n", entry.reason));
     }
 
     if doc.entries.len() > 20 {
@@ -45,27 +56,63 @@ pub fn to_human_string(doc: &OutputDocument) -> String {
         ));
     }
 
-    // Recommendations
     if !doc.recommended_next_steps.is_empty() {
-        out.push_str("\nRecommended next steps:\n");
-        for rec in &doc.recommended_next_steps {
-            out.push_str(&format!("  {} {} — {}\n", rec.action, rec.path, rec.reason));
+        out.push_str("\nNext steps\n");
+        for (index, rec) in doc.recommended_next_steps.iter().enumerate() {
+            out.push_str(&format!("  {}. {} {}\n", index + 1, rec.action, rec.path));
+            out.push_str(&format!("     {}\n", rec.reason));
         }
     }
 
-    // Warnings
     if !doc.warnings.is_empty() {
-        out.push_str("\nWarnings:\n");
+        out.push_str("\nWarnings\n");
         for w in &doc.warnings {
+            out.push_str(&format!("  - {}\n", w.code));
+            out.push_str(&format!("    {}\n", w.message));
             if let Some(ref path) = w.path {
-                out.push_str(&format!("  {}: {} ({})\n", w.code, w.message, path));
-            } else {
-                out.push_str(&format!("  {}: {}\n", w.code, w.message));
+                out.push_str(&format!("    path: {}\n", path));
             }
         }
     }
 
     out
+}
+
+fn humanize(value: &str) -> String {
+    value.replace('_', " ")
+}
+
+fn format_flags(entry: &EntryOutput) -> String {
+    match (entry.generated, entry.sensitive) {
+        (true, true) => "generated, sensitive".to_string(),
+        (true, false) => "generated".to_string(),
+        (false, true) => "sensitive".to_string(),
+        (false, false) => String::new(),
+    }
+}
+
+fn format_size(size_bytes: Option<u64>) -> String {
+    match size_bytes {
+        Some(bytes) => human_size(bytes),
+        None => "-".to_string(),
+    }
+}
+
+fn human_size(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit_idx = 0;
+
+    while size >= 1024.0 && unit_idx < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_idx += 1;
+    }
+
+    if unit_idx == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{size:.1} {}", UNITS[unit_idx])
+    }
 }
 
 #[cfg(test)]
@@ -79,7 +126,7 @@ mod tests {
             project_type: ProjectTypeOutput {
                 name: "rust_cli".into(),
                 confidence: 0.95,
-                evidence: vec![],
+                evidence: vec!["Cargo.toml".into(), "src/main.rs".into()],
             },
             summary: SummaryOutput {
                 total_entries: 3,
@@ -132,8 +179,10 @@ mod tests {
         let output = to_human_string(&sample_doc());
         assert!(output.contains("lls — ."));
         assert!(output.contains("rust_cli"));
+        assert!(output.contains("Evidence: Cargo.toml, src/main.rs"));
+        assert!(output.contains("Top entries"));
         assert!(output.contains("Cargo.toml"));
-        assert!(output.contains("Recommended next steps"));
+        assert!(output.contains("Next steps"));
     }
 
     #[test]
@@ -146,6 +195,12 @@ mod tests {
     #[test]
     fn test_human_generated_marker() {
         let output = to_human_string(&sample_doc());
-        assert!(output.contains("[generated]"));
+        assert!(output.contains("flags: generated"));
+    }
+
+    #[test]
+    fn test_human_size_formatting() {
+        assert_eq!(human_size(0), "0 B");
+        assert_eq!(human_size(1024), "1.0 KB");
     }
 }
