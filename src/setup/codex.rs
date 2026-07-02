@@ -245,11 +245,9 @@ mod tests {
             "Codex output should use system temp directory"
         );
 
-        // Path should NOT be under any project's .lls directory
-        let path_str = output_path.to_string_lossy();
-        assert!(
-            !path_str.contains(".lls/"),
-            "Codex output path should not be under .lls/"
-        );
+        // Path should NOT be under any project's .lls directory.
+        // Check using Path operations to be platform-independent.
+        let has_lls_dir = output_path.components().any(|c| c.as_os_str() == ".lls");
+        assert!(!has_lls_dir, "Codex output path should not be under .lls/");
     }
 }
