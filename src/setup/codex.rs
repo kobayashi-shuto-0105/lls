@@ -60,6 +60,10 @@ pub fn validate_codex_output(json_str: &str) -> Result<ValidatedCodexOutput, App
 }
 
 /// Map Codex process errors to AppError.
+///
+/// This function sanitizes error messages to avoid exposing internal paths,
+/// credentials, or raw stderr content to users. It categorizes common failure
+/// patterns into user-friendly messages.
 fn map_codex_error(err: ProcessError) -> AppError {
     match err {
         ProcessError::NotFound => {
@@ -67,10 +71,89 @@ fn map_codex_error(err: ProcessError) -> AppError {
         }
         ProcessError::Timeout => AppError::Codex("Codex timeout: generation took too long".into()),
         ProcessError::NonZeroExit { code, stderr } => {
-            AppError::Codex(format!("Codex exited with code {code}: {stderr}"))
+            let user_message = categorize_codex_failure(code, &stderr);
+            AppError::Codex(user_message)
         }
-        ProcessError::Io(msg) => AppError::Codex(format!("Codex I/O error: {msg}")),
+        ProcessError::Io(msg) => {
+            // Sanitize I/O error messages to avoid exposing internal paths
+            let sanitized = sanitize_io_error(&msg);
+            AppError::Codex(format!("Codex I/O error: {sanitized}"))
+        }
     }
+}
+
+/// Categorize Codex failure based on exit code and stderr patterns.
+///
+/// Returns a user-friendly message without exposing raw stderr content or
+/// internal paths like `~/.codex/state_*.sqlite`.
+fn categorize_codex_failure(code: i32, stderr: &str) -> String {
+    let stderr_lower = stderr.to_lowercase();
+
+    // Authentication-related failures
+    if stderr_lower.contains("not logged in")
+        || stderr_lower.contains("authentication")
+        || stderr_lower.contains("auth")
+        || stderr_lower.contains("sign in")
+        || stderr_lower.contains("login")
+    {
+        return "Codex authentication required. Run `codex login` to sign in with ChatGPT".into();
+    }
+
+    // Network-related failures
+    if stderr_lower.contains("network")
+        || stderr_lower.contains("connection")
+        || stderr_lower.contains("timeout")
+        || stderr_lower.contains("unreachable")
+        || stderr_lower.contains("dns")
+    {
+        return "Codex network error. Check your internet connection and try again".into();
+    }
+
+    // Rate limiting
+    if stderr_lower.contains("rate limit") || stderr_lower.contains("too many requests") {
+        return "Codex rate limit reached. Please wait a moment and try again".into();
+    }
+
+    // Permission or sandbox errors
+    if stderr_lower.contains("permission denied") || stderr_lower.contains("sandbox") {
+        return "Codex permission error. The sandbox may not have required access".into();
+    }
+
+    // Internal state errors (e.g., sqlite database issues)
+    if stderr_lower.contains("sqlite")
+        || stderr_lower.contains("database")
+        || stderr_lower.contains("state")
+    {
+        return "Codex internal state error. Try running `codex` directly to diagnose".into();
+    }
+
+    // Configuration errors
+    if stderr_lower.contains("config") || stderr_lower.contains("invalid") {
+        return "Codex configuration error. Check your Codex CLI setup".into();
+    }
+
+    // Default: provide exit code without raw stderr
+    format!("Codex failed with exit code {code}. Run `codex` directly to diagnose")
+}
+
+/// Sanitize I/O error messages to avoid exposing internal paths.
+fn sanitize_io_error(msg: &str) -> String {
+    // Remove any file paths that look like internal state paths
+    // e.g., /home/user/.codex/state_5.sqlite -> [internal path]
+    let patterns = [
+        r"(/[^\s]+)?\.codex[^\s]*", // .codex directory paths
+        r"/home/[^\s]+",            // Home directory paths
+        r"~[^\s]+",                 // Tilde-expanded paths
+        r"C:\\Users\\[^\s]+",       // Windows user paths
+    ];
+
+    let mut result = msg.to_string();
+    for pattern in patterns {
+        if let Ok(re) = regex::Regex::new(pattern) {
+            result = re.replace_all(&result, "[internal path]").to_string();
+        }
+    }
+    result
 }
 
 /// Production Codex runner using `std::process::Command`.
@@ -226,5 +309,127 @@ mod tests {
         };
         let result = runner.run(request);
         assert!(matches!(result, Err(crate::codex::ProcessError::NotFound)));
+    }
+
+    // Tests for error sanitization (issue #12)
+
+    #[test]
+    fn test_categorize_auth_failure() {
+        let msg = categorize_codex_failure(1, "Error: not logged in");
+        assert!(msg.contains("authentication required"));
+        assert!(!msg.contains("not logged in")); // raw stderr not exposed
+
+        let msg = categorize_codex_failure(1, "Please sign in to continue");
+        assert!(msg.contains("authentication required"));
+    }
+
+    #[test]
+    fn test_categorize_network_failure() {
+        let msg = categorize_codex_failure(1, "Network connection failed");
+        assert!(msg.contains("network error"));
+        assert!(!msg.contains("failed")); // raw stderr not exposed
+
+        let msg = categorize_codex_failure(1, "DNS resolution timeout");
+        assert!(msg.contains("network error"));
+    }
+
+    #[test]
+    fn test_categorize_rate_limit() {
+        let msg = categorize_codex_failure(1, "Rate limit exceeded, too many requests");
+        assert!(msg.contains("rate limit"));
+    }
+
+    #[test]
+    fn test_categorize_permission_error() {
+        let msg = categorize_codex_failure(1, "Permission denied accessing sandbox");
+        assert!(msg.contains("permission error"));
+    }
+
+    #[test]
+    fn test_categorize_internal_state_error() {
+        // This is the specific case from the issue - sqlite paths should not be exposed
+        let msg =
+            categorize_codex_failure(1, "Error: failed to open /home/user/.codex/state_5.sqlite");
+        assert!(msg.contains("internal state error"));
+        assert!(!msg.contains("sqlite")); // sqlite path not in message
+        assert!(!msg.contains(".codex")); // internal path not exposed
+        assert!(!msg.contains("/home/user")); // user path not exposed
+    }
+
+    #[test]
+    fn test_categorize_config_error() {
+        let msg = categorize_codex_failure(1, "Invalid config file format");
+        assert!(msg.contains("configuration error"));
+    }
+
+    #[test]
+    fn test_categorize_unknown_error() {
+        // Unknown error should show exit code but not raw stderr
+        let msg = categorize_codex_failure(42, "Some unexpected error with /secret/path");
+        assert!(msg.contains("exit code 42"));
+        assert!(!msg.contains("unexpected error")); // raw stderr not exposed
+        assert!(!msg.contains("/secret/path")); // internal path not exposed
+    }
+
+    #[test]
+    fn test_sanitize_io_error_removes_codex_paths() {
+        let sanitized = sanitize_io_error("Failed to read /home/user/.codex/state_5.sqlite");
+        assert!(!sanitized.contains(".codex"));
+        assert!(!sanitized.contains("state_5.sqlite"));
+        assert!(sanitized.contains("[internal path]"));
+    }
+
+    #[test]
+    fn test_sanitize_io_error_removes_home_paths() {
+        let sanitized = sanitize_io_error("Cannot access /home/user/secret/file.txt");
+        assert!(!sanitized.contains("/home/user"));
+        assert!(sanitized.contains("[internal path]"));
+    }
+
+    #[test]
+    fn test_sanitize_io_error_removes_tilde_paths() {
+        let sanitized = sanitize_io_error("File not found: ~/.codex/auth.json");
+        assert!(!sanitized.contains("~/.codex"));
+        assert!(sanitized.contains("[internal path]"));
+    }
+
+    #[test]
+    fn test_sanitize_io_error_preserves_safe_messages() {
+        let sanitized = sanitize_io_error("Operation timed out");
+        assert_eq!(sanitized, "Operation timed out");
+    }
+
+    #[test]
+    fn test_map_codex_non_zero_exit_sanitized() {
+        // Verify that NonZeroExit errors are properly sanitized
+        let err = map_codex_error(crate::codex::ProcessError::NonZeroExit {
+            code: 1,
+            stderr: "Error: failed to connect to /home/user/.codex/state.db".into(),
+        });
+        match err {
+            AppError::Codex(msg) => {
+                // Should NOT contain raw stderr or paths
+                assert!(!msg.contains("/home/user"));
+                assert!(!msg.contains(".codex"));
+                assert!(!msg.contains("state.db"));
+                // Should contain user-friendly message
+                assert!(msg.contains("internal state error") || msg.contains("exit code"));
+            }
+            _ => panic!("expected Codex error"),
+        }
+    }
+
+    #[test]
+    fn test_map_codex_io_error_sanitized() {
+        let err = map_codex_error(crate::codex::ProcessError::Io(
+            "Cannot open /home/user/.codex/config.json".into(),
+        ));
+        match err {
+            AppError::Codex(msg) => {
+                assert!(!msg.contains("/home/user"));
+                assert!(msg.contains("[internal path]") || msg.contains("I/O error"));
+            }
+            _ => panic!("expected Codex error"),
+        }
     }
 }
