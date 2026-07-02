@@ -1,3 +1,5 @@
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::time::Duration;
 
 use crate::codex::{ProcessError, ProcessRequest, ProcessRunner};
@@ -90,11 +92,14 @@ fn categorize_codex_failure(code: i32, stderr: &str) -> String {
     let stderr_lower = stderr.to_lowercase();
 
     // Authentication-related failures
+    // Note: We use specific phrases to avoid false positives like "author"
     if stderr_lower.contains("not logged in")
-        || stderr_lower.contains("authentication")
-        || stderr_lower.contains("auth")
+        || stderr_lower.contains("authentication required")
+        || stderr_lower.contains("authentication failed")
         || stderr_lower.contains("sign in")
-        || stderr_lower.contains("login")
+        || stderr_lower.contains("please login")
+        || stderr_lower.contains("need to login")
+        || stderr_lower.contains("unauthenticated")
     {
         return "Codex authentication required. Run `codex login` to sign in with ChatGPT".into();
     }
@@ -136,22 +141,33 @@ fn categorize_codex_failure(code: i32, stderr: &str) -> String {
     format!("Codex failed with exit code {code}. Run `codex` directly to diagnose")
 }
 
-/// Sanitize I/O error messages to avoid exposing internal paths.
-fn sanitize_io_error(msg: &str) -> String {
-    // Remove any file paths that look like internal state paths
-    // e.g., /home/user/.codex/state_5.sqlite -> [internal path]
+/// Static regex patterns for sanitizing paths.
+/// Compiled once using Lazy to avoid recompilation on each call.
+static PATH_SANITIZERS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    // These patterns are intentionally strict to avoid false positives
     let patterns = [
-        r"(/[^\s]+)?\.codex[^\s]*", // .codex directory paths
-        r"/home/[^\s]+",            // Home directory paths
-        r"~[^\s]+",                 // Tilde-expanded paths
-        r"C:\\Users\\[^\s]+",       // Windows user paths
+        // Match paths containing .codex directory (must start with / or ~/)
+        r"(?:/[^\s]*)?/\.codex[^\s]*",
+        r"~/\.codex[^\s]*",
+        // Home directory paths on Unix (must have /home/ prefix)
+        r"/home/[^\s]+",
+        // Tilde-expanded paths (must start with ~/ to avoid matching ~1.5ms etc.)
+        r"~/[^\s]+",
+        // Windows user paths
+        r"C:\\Users\\[^\s]+",
     ];
 
+    patterns
+        .iter()
+        .map(|p| Regex::new(p).expect("invalid path sanitizer regex"))
+        .collect()
+});
+
+/// Sanitize I/O error messages to avoid exposing internal paths.
+fn sanitize_io_error(msg: &str) -> String {
     let mut result = msg.to_string();
-    for pattern in patterns {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            result = re.replace_all(&result, "[internal path]").to_string();
-        }
+    for re in PATH_SANITIZERS.iter() {
+        result = re.replace_all(&result, "[internal path]").to_string();
     }
     result
 }
@@ -321,6 +337,26 @@ mod tests {
 
         let msg = categorize_codex_failure(1, "Please sign in to continue");
         assert!(msg.contains("authentication required"));
+
+        // "unauthenticated" should trigger auth message
+        let msg = categorize_codex_failure(1, "Request was unauthenticated");
+        assert!(msg.contains("authentication required"));
+    }
+
+    #[test]
+    fn test_categorize_auth_no_false_positives() {
+        // "author" should NOT trigger auth message (it was a false positive with old "auth" pattern)
+        let msg = categorize_codex_failure(1, "Unknown author field detected");
+        assert!(!msg.contains("authentication required"));
+        // Should NOT fall through to config error either - "author" shouldn't match anything
+        // but "Unknown" doesn't trigger any category, so this becomes an unknown error
+        // Let's use a cleaner example that doesn't match any category
+        let msg = categorize_codex_failure(1, "File authored by user");
+        assert!(
+            !msg.contains("authentication required"),
+            "'authored' should not trigger auth error"
+        );
+        assert!(msg.contains("exit code"), "should fall through to unknown");
     }
 
     #[test]
@@ -348,12 +384,17 @@ mod tests {
     #[test]
     fn test_categorize_internal_state_error() {
         // This is the specific case from the issue - sqlite paths should not be exposed
-        let msg =
-            categorize_codex_failure(1, "Error: failed to open /home/user/.codex/state_5.sqlite");
+        let raw_stderr = "Error: failed to open /home/user/.codex/state_5.sqlite";
+        let msg = categorize_codex_failure(1, raw_stderr);
         assert!(msg.contains("internal state error"));
-        assert!(!msg.contains("sqlite")); // sqlite path not in message
-        assert!(!msg.contains(".codex")); // internal path not exposed
-        assert!(!msg.contains("/home/user")); // user path not exposed
+        // Verify the raw stderr is NOT present in the user-facing message
+        assert!(
+            !msg.contains(raw_stderr),
+            "raw stderr should not be in message"
+        );
+        assert!(!msg.contains("sqlite"), "sqlite keyword not in message");
+        assert!(!msg.contains(".codex"), "internal path not exposed");
+        assert!(!msg.contains("/home/user"), "user path not exposed");
     }
 
     #[test]
@@ -365,10 +406,16 @@ mod tests {
     #[test]
     fn test_categorize_unknown_error() {
         // Unknown error should show exit code but not raw stderr
-        let msg = categorize_codex_failure(42, "Some unexpected error with /secret/path");
+        let raw_stderr = "Some unexpected error with /secret/path";
+        let msg = categorize_codex_failure(42, raw_stderr);
         assert!(msg.contains("exit code 42"));
-        assert!(!msg.contains("unexpected error")); // raw stderr not exposed
-        assert!(!msg.contains("/secret/path")); // internal path not exposed
+        // Verify the raw stderr is NOT present in the user-facing message
+        assert!(
+            !msg.contains(raw_stderr),
+            "raw stderr should not be in message"
+        );
+        assert!(!msg.contains("unexpected error"), "raw stderr not exposed");
+        assert!(!msg.contains("/secret/path"), "internal path not exposed");
     }
 
     #[test]
@@ -394,6 +441,23 @@ mod tests {
     }
 
     #[test]
+    fn test_sanitize_io_error_no_false_positives() {
+        // Tilde followed by numbers (like "~1.5ms") should NOT be sanitized
+        let sanitized = sanitize_io_error("Operation completed in ~1.5ms");
+        assert_eq!(sanitized, "Operation completed in ~1.5ms");
+
+        let sanitized = sanitize_io_error("Approximately ~500 requests processed");
+        assert_eq!(sanitized, "Approximately ~500 requests processed");
+
+        // Text containing ".codex" but not as a path should be handled correctly
+        let sanitized = sanitize_io_error("my.codex-file is missing");
+        assert!(
+            sanitized.contains("my.codex"),
+            "should not match .codex without path prefix"
+        );
+    }
+
+    #[test]
     fn test_sanitize_io_error_preserves_safe_messages() {
         let sanitized = sanitize_io_error("Operation timed out");
         assert_eq!(sanitized, "Operation timed out");
@@ -402,13 +466,18 @@ mod tests {
     #[test]
     fn test_map_codex_non_zero_exit_sanitized() {
         // Verify that NonZeroExit errors are properly sanitized
+        let raw_stderr = "Error: failed to connect to /home/user/.codex/state.db";
         let err = map_codex_error(crate::codex::ProcessError::NonZeroExit {
             code: 1,
-            stderr: "Error: failed to connect to /home/user/.codex/state.db".into(),
+            stderr: raw_stderr.into(),
         });
         match err {
             AppError::Codex(msg) => {
                 // Should NOT contain raw stderr or paths
+                assert!(
+                    !msg.contains(raw_stderr),
+                    "raw stderr should not be in message"
+                );
                 assert!(!msg.contains("/home/user"));
                 assert!(!msg.contains(".codex"));
                 assert!(!msg.contains("state.db"));
