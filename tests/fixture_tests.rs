@@ -236,61 +236,75 @@ fn test_missing_config_setup_required() {
     assert!(output.stdout.is_empty());
 }
 
-/// Test depth 0 returns direct children (no recursion).
+/// Test depth 0 returns only the target entry.
 #[test]
-fn test_depth_0_children() {
+fn test_depth_0_target_only() {
     let dir = tempfile::tempdir().unwrap();
     common::fixture_rust_cli(dir.path());
 
     let json = common::run_lls_json(&["--no-config", "--depth", "0"], dir.path());
     let entries = json["entries"].as_array().unwrap();
-    // Depth 0: show immediate children of target (no recursion into dirs)
-    assert!(!entries.is_empty());
-    // src/ directory should be present but its children (src/main.rs) should NOT
-    for e in entries {
-        assert!(
-            !e["path"].as_str().unwrap().contains('/'),
-            "depth 0 should not show nested paths: {}",
-            e["path"]
-        );
-    }
+    assert_eq!(entries.len(), 1, "depth 0 should only include the target");
+    assert_eq!(entries[0]["path"], ".");
 }
 
-/// Test depth 2 shows grandchildren.
+/// Test depth semantics are relative to the target entry itself.
 #[test]
-fn test_depth_2_grandchildren() {
+fn test_depth_progression() {
     let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("root.txt"), "data").unwrap();
     std::fs::create_dir_all(dir.path().join("a").join("b")).unwrap();
-    std::fs::write(dir.path().join("a").join("b").join("c.txt"), "data").unwrap();
-    std::fs::write(dir.path().join("a").join("root.txt"), "data").unwrap();
+    std::fs::write(dir.path().join("a").join("child.txt"), "data").unwrap();
+    std::fs::write(
+        dir.path().join("a").join("b").join("grandchild.txt"),
+        "data",
+    )
+    .unwrap();
 
-    // Depth 1: shows a, a/b, a/root.txt (recurse 1 level down)
+    // Depth 1: target entry plus direct children.
     let json1 = common::run_lls_json(&["--no-config", "--depth", "1"], dir.path());
     let entries1 = json1["entries"].as_array().unwrap();
     let paths1: Vec<&str> = entries1
         .iter()
         .map(|e| e["path"].as_str().unwrap())
         .collect();
+    assert!(paths1.contains(&"."), "depth 1 should include the target");
+    assert!(
+        paths1.contains(&"root.txt"),
+        "depth 1 should include root.txt"
+    );
     assert!(paths1.contains(&"a"), "depth 1 should include a");
     assert!(
-        paths1.contains(&"a/b"),
-        "depth 1 should include a/b (1 level down)"
+        !paths1.contains(&"a/child.txt"),
+        "depth 1 should NOT include a/child.txt"
     );
-    assert!(
-        !paths1.contains(&"a/b/c.txt"),
-        "depth 1 should NOT include a/b/c.txt"
-    );
+    assert!(!paths1.contains(&"a/b"), "depth 1 should NOT include a/b");
 
-    // Depth 2: shows everything including a/b/c.txt
+    // Depth 2: includes grandchildren but not great-grandchildren.
     let json2 = common::run_lls_json(&["--no-config", "--depth", "2"], dir.path());
     let entries2 = json2["entries"].as_array().unwrap();
     let paths2: Vec<&str> = entries2
         .iter()
         .map(|e| e["path"].as_str().unwrap())
         .collect();
+    assert!(paths2.contains(&"."));
+    assert!(paths2.contains(&"root.txt"));
     assert!(paths2.contains(&"a"));
+    assert!(paths2.contains(&"a/child.txt"));
     assert!(paths2.contains(&"a/b"));
-    assert!(paths2.contains(&"a/b/c.txt"));
+    assert!(
+        !paths2.contains(&"a/b/grandchild.txt"),
+        "depth 2 should NOT include a/b/grandchild.txt"
+    );
+
+    // Depth 3: includes great-grandchildren.
+    let json3 = common::run_lls_json(&["--no-config", "--depth", "3"], dir.path());
+    let entries3 = json3["entries"].as_array().unwrap();
+    let paths3: Vec<&str> = entries3
+        .iter()
+        .map(|e| e["path"].as_str().unwrap())
+        .collect();
+    assert!(paths3.contains(&"a/b/grandchild.txt"));
 }
 
 /// Test JSON output format: compact, trailing newline, no null.
@@ -384,7 +398,7 @@ fn test_custom_config_flag() {
     let dir = tempfile::tempdir().unwrap();
     common::fixture_rust_cli(dir.path());
 
-    // Create a custom config with depth 0 (direct children only)
+    // Create a custom config with depth 0 (target entry only)
     let config = r#"{
         "schema_version": "0.1.0",
         "default_output": "json",
@@ -403,17 +417,9 @@ fn test_custom_config_flag() {
 
     // Run with --config
     let json = common::run_lls_json(&["--config", "myconfig.json"], dir.path());
-    // Depth 0 shows immediate children (no recursion)
     let entries = json["entries"].as_array().unwrap();
-    assert!(!entries.is_empty());
-    // No entry should have a '/' in path (no nested paths at depth 0)
-    for e in entries {
-        assert!(
-            !e["path"].as_str().unwrap().contains('/'),
-            "depth 0 should not show nested paths: {}",
-            e["path"]
-        );
-    }
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["path"], ".");
 }
 
 /// Test deterministic output: same state gives same JSON.

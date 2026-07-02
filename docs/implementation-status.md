@@ -13,7 +13,7 @@
 - **Next task:** M8-02 — Cross-platform behavior
 - **MVP implementation:** substantially complete (M0-M7 done, M8 hardening in progress)
 - **Blocking issues:** none
-- **Last updated:** 2026-06-12
+- **Last updated:** 2026-07-01
 
 実装状況:
 
@@ -124,6 +124,21 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-07-01 — Depth semantics aligned with spec
+
+- Fixed scanner depth handling so `depth 0` returns only the target entry and deeper values count from that root
+- Added a dedicated raw-entry builder for the target path so directory scans include `.` at depth 0 without breaking child path normalization
+- Updated scanner unit tests and fixture integration tests to cover `depth 0/1/2/3` progression against the spec-defined behavior
+- Verified targeted depth tests before running the broader verification suite
+
+### 2026-06-26 — Codex app-server setup timeout hardening
+
+- Investigated `lls setup` timeouts against the Codex app-server path
+- Verified raw app-server protocol: `turn/start` returns `status: inProgress`, then streams `item/completed` and `turn/completed`
+- Updated setup turn handling to read final agent output from `turn.items` as well as item notifications
+- Increased setup turn timeout to 300s and made timeout errors include captured app-server stderr
+- `cargo test` passing after the change
 
 ### 2026-06-12 — M5-M8 hardening (PR #9)
 
