@@ -15,7 +15,7 @@ markup:
     noClasses: false
 
 params:
-  description: "ls for LLMs: a directory listing CLI for agents."
+  description: "LLM やエージェント向けに、重要なファイルと次の探索先を返す CLI。"
   navbar:
     displayTitle: true
     displayLogo: false
@@ -33,7 +33,7 @@ params:
 
 menu:
   main:
-    - name: Docs
+    - name: ドキュメント
       pageRef: /docs
       weight: 1
     - name: GitHub

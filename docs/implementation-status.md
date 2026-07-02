@@ -125,10 +125,18 @@
 
 新しいentryは上へ追加する。
 
+### 2026-07-02 — README and Hugo docs entry cleanup
+
+- Translated the remaining English-heavy README sections into Japanese while keeping command examples intact
+- Added a dedicated `/docs` landing page for Hugo so readers can jump directly to spec, architecture, setup, and implementation status
+- Localized the Hugo site description and top-level menu labels to match the rest of the repository
+- Planned verification: format, targeted content checks, full test suite, and release build
+
 ### 2026-07-02 — Human output presentation refresh
 
 - Reworked `--human` output into structured sections: project header, evidence, summary, top entries, next steps, and warnings
 - Added per-entry size display plus `flags` and `why` lines so high-signal context is visible without switching to JSON
+- Added ANSI color accents and emoji badges for section headers, priorities, roles, entry types, actions, and warnings to make terminal output more scannable
 - Updated human-output unit and fixture tests to cover the richer presentation
 - Planned verification: format, targeted tests, full test suite, clippy, and release build
 

@@ -20,7 +20,7 @@
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  
 通常の `ls` が「何があるか」を並べるのに対して、`lls` は「何が重要か」「何を後回しにしてよいか」「次にどこを見るべきか」を返すことを目指します。
 
-## Overview
+## 概要
 
 リポジトリ探索では、単なるファイル名の一覧だけでは判断材料が足りません。  
 特に LLM にとっては、次のような点が最初のボトルネックになります。
@@ -32,7 +32,7 @@
 
 `lls` はこの問題に対して、意味付きで優先度のある一覧を返すことで対応します。
 
-## What `lls` Tries To Return
+## `lls` が返したいもの
 
 想定している出力の方向性は次のとおりです。
 
@@ -45,7 +45,7 @@
 
 たとえば `README.md` や `Cargo.toml` は高優先度、`target/` や `.git/` は低優先度または無視対象として扱う、というような出し分けを想定しています。
 
-## Document Roles
+## ドキュメントの役割
 
 このリポジトリでは、ドキュメントの役割を次のように分けます。
 
@@ -56,35 +56,35 @@
 詳細な要求整理は [`.github/assets/spec.md`](.github/assets/spec.md) を参照してください。  
 将来機能のメモは [`.github/assets/feature-spec.md`](.github/assets/feature-spec.md) に分けて管理します。
 
-## Current Status
+## 現在の状況
 
-**MVP implementation in progress.** All core modules are implemented and tested.
+**MVP 実装は概ね完了しています。** コア機能は実装済みで、テストも整備されています。
 
-## Installation
+## インストール
 
 ```bash
-# Build from source
+# ソースからビルド
 git clone https://github.com/kobayashi-shuto-0105/lls.git
 cd lls
 cargo build --release
-# Binary at target/release/lls
+# バイナリは target/release/lls
 ```
 
-Install via `cargo` (once published):
+`cargo` 経由のインストール（公開後を想定）:
 ```bash
 cargo install lls
 ```
 
 ## Docker
 
-The runtime image in [`Containerfile`](Containerfile) uses `dhi.io/debian-base:trixie`.
-Authenticate to `dhi.io` before building:
+ランタイムイメージは [`Containerfile`](Containerfile) で `dhi.io/debian-base:trixie` を使います。  
+ビルド前に `dhi.io` へログインしてください。
 
 ```sh
 docker login dhi.io
 ```
 
-Build the image:
+イメージをビルド:
 
 ```sh
 docker build \
@@ -96,87 +96,87 @@ docker build \
   .
 ```
 
-Run the CLI:
+CLI を起動:
 
 ```sh
 docker run --rm lls:dev --help
 ```
 
-Run against the current directory:
+現在のディレクトリを対象に実行:
 
 ```sh
 docker run --rm -v "$PWD:/work" -w /work lls:dev --no-config -H .
 ```
 
-Generate project configuration in the mounted directory:
+マウントしたディレクトリに設定を生成:
 
 ```sh
 docker run --rm -v "$PWD:/work" -w /work lls:dev setup
 ```
 
-## Usage
+## 使い方
 
-### Basic listing (requires config or `--no-config`)
+### 基本実行（設定ファイルまたは `--no-config` が必要）
 
 ```bash
-# Use built-in defaults (no config file needed)
+# 組み込み既定値で実行（設定ファイル不要）
 lls --no-config
 
-# With automatic config discovery
-lls setup --without-codex  # create .lls/config.json
-lls                         # use discovered config
+# 設定ファイルを生成して通常実行
+lls setup --without-codex  # .lls/config.json を作成
+lls                        # 発見した設定を使用
 ```
 
-### Output modes
+### 出力モード
 
 ```bash
-lls --json       # compact JSON (default)
-lls --human      # human-readable text
-lls -l           # long listing format
+lls --json       # 1行の compact JSON（デフォルト）
+lls --human      # 人間向けテキスト表示
+lls -l           # long listing 形式
 ```
 
-### Options
+### 主なオプション
 
 ```bash
-lls <path>                   # scan a specific path
-lls --depth <0-8>            # set scan depth (default: 1)
+lls <path>                   # 特定のパスを走査
+lls --depth <0-8>            # 走査深度を指定（既定値: 1）
 lls --sort <name|mtime|size|priority>
-lls --config <path>          # use explicit config file
-lls --no-config              # skip config discovery
+lls --config <path>          # 設定ファイルを明示指定
+lls --no-config              # 設定探索を行わない
 ```
 
 ### Setup
 
 ```bash
-lls setup                    # generate config with Codex assist
-lls setup --without-codex    # generate config from built-in defaults
-lls setup --force            # overwrite existing config
-lls setup --yes              # skip confirmation prompt
+lls setup                    # Codex を使って設定案を生成
+lls setup --without-codex    # 組み込み既定値から設定を生成
+lls setup --force            # 既存設定を上書き
+lls setup --yes              # 確認プロンプトを省略
 ```
 
-## Output Example
+## 出力例
 
 ```json
 {"schema_version":"0.1.0","path":".","project_type":{"name":"rust_cli","confidence":0.95,"evidence":["Cargo.toml","src/main.rs"]},"summary":{"total_entries":7,"shown_entries":7,"important_entries":4,"ignored_entries":2},"entries":[{"name":"Cargo.toml","path":"Cargo.toml","type":"file","role":"manifest","priority":"critical","reason_code":"known_manifest","reason":"マニフェストファイル","generated":false,"sensitive":false,"text":true,"binary":false,"size_bytes":1024},{"name":"README.md","path":"README.md","type":"file","role":"project_overview","priority":"critical","reason_code":"project_overview","reason":"プロジェクト概要","generated":false,"sensitive":false,"text":true,"binary":false,"size_bytes":512},{"name":"src","path":"src","type":"directory","role":"source_code","priority":"high","reason_code":"source_code_directory","reason":"ソースコード","generated":false,"sensitive":false,"text":false,"binary":false}],"recommended_next_steps":[{"action":"read","path":"README.md","reason_code":"read_project_overview_first","reason":"プロジェクト概要を把握するため"},{"action":"read","path":"Cargo.toml","reason_code":"read_manifest_first","reason":"プロジェクト構成を理解するため"}],"warnings":[]}
 ```
 
-## Exit Codes
+## 終了コード
 
 | Code | Meaning |
 |-----:|---------|
-| `0` | Success |
-| `1` | CLI argument error |
-| `2` | Target path not found |
-| `3` | Permission denied |
-| `4` | Unexpected runtime error |
-| `5` | Setup required (no config found) |
-| `6` | Codex CLI failure |
-| `7` | Invalid configuration |
+| `0` | 成功 |
+| `1` | CLI 引数エラー |
+| `2` | 対象パスが存在しない |
+| `3` | 権限不足 |
+| `4` | 想定外の実行時エラー |
+| `5` | setup が必要（設定ファイル未発見） |
+| `6` | Codex CLI / setup エラー |
+| `7` | 設定ファイル不正 |
 
-## Development
+## 開発
 
 ```bash
-# Run tests
+# テスト
 cargo test --all-targets --all-features
 
 # Lint
