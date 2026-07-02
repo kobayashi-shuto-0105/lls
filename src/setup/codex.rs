@@ -125,15 +125,23 @@ fn categorize_codex_failure(code: i32, stderr: &str) -> String {
     }
 
     // Internal state errors (e.g., sqlite database issues)
+    // Use specific patterns to avoid matching unrelated "state" mentions
     if stderr_lower.contains("sqlite")
-        || stderr_lower.contains("database")
-        || stderr_lower.contains("state")
+        || stderr_lower.contains("database error")
+        || stderr_lower.contains("state.db")
+        || stderr_lower.contains("state.sqlite")
+        || stderr_lower.contains("state file")
     {
         return "Codex internal state error. Try running `codex` directly to diagnose".into();
     }
 
     // Configuration errors
-    if stderr_lower.contains("config") || stderr_lower.contains("invalid") {
+    // Use specific "config" patterns; avoid overly broad "invalid" which matches too many errors
+    if stderr_lower.contains("config error")
+        || stderr_lower.contains("config file")
+        || stderr_lower.contains("invalid config")
+        || stderr_lower.contains("configuration")
+    {
         return "Codex configuration error. Check your Codex CLI setup".into();
     }
 
@@ -346,11 +354,7 @@ mod tests {
     #[test]
     fn test_categorize_auth_no_false_positives() {
         // "author" should NOT trigger auth message (it was a false positive with old "auth" pattern)
-        let msg = categorize_codex_failure(1, "Unknown author field detected");
-        assert!(!msg.contains("authentication required"));
-        // Should NOT fall through to config error either - "author" shouldn't match anything
-        // but "Unknown" doesn't trigger any category, so this becomes an unknown error
-        // Let's use a cleaner example that doesn't match any category
+        // This message doesn't match any specific category, so it falls through to unknown
         let msg = categorize_codex_failure(1, "File authored by user");
         assert!(
             !msg.contains("authentication required"),
@@ -386,21 +390,52 @@ mod tests {
         // This is the specific case from the issue - sqlite paths should not be exposed
         let raw_stderr = "Error: failed to open /home/user/.codex/state_5.sqlite";
         let msg = categorize_codex_failure(1, raw_stderr);
-        assert!(msg.contains("internal state error"));
+        // Verify correct categorization based on "sqlite" keyword
+        assert!(
+            msg.contains("internal state error"),
+            "should be categorized as internal state error"
+        );
         // Verify the raw stderr is NOT present in the user-facing message
         assert!(
             !msg.contains(raw_stderr),
             "raw stderr should not be in message"
         );
-        assert!(!msg.contains("sqlite"), "sqlite keyword not in message");
         assert!(!msg.contains(".codex"), "internal path not exposed");
         assert!(!msg.contains("/home/user"), "user path not exposed");
     }
 
     #[test]
+    fn test_categorize_internal_state_no_false_positives() {
+        // Generic "state" mentions should NOT trigger internal state error
+        // (we now require specific patterns like "state.db", "state.sqlite", "sqlite", etc.)
+        let msg = categorize_codex_failure(1, "Invalid state transition detected");
+        assert!(
+            !msg.contains("internal state error"),
+            "generic 'state' should not trigger internal state error"
+        );
+        assert!(msg.contains("exit code"), "should fall through to unknown");
+    }
+
+    #[test]
     fn test_categorize_config_error() {
-        let msg = categorize_codex_failure(1, "Invalid config file format");
+        // "config file" phrase triggers config error
+        let msg = categorize_codex_failure(1, "Config file format error");
         assert!(msg.contains("configuration error"));
+
+        // "invalid config" phrase also triggers
+        let msg = categorize_codex_failure(1, "Invalid config detected");
+        assert!(msg.contains("configuration error"));
+    }
+
+    #[test]
+    fn test_categorize_config_no_false_positives() {
+        // Generic "invalid" without "config" should NOT trigger config error
+        let msg = categorize_codex_failure(1, "Invalid request format");
+        assert!(
+            !msg.contains("configuration error"),
+            "generic 'invalid' should not trigger config error"
+        );
+        assert!(msg.contains("exit code"), "should fall through to unknown");
     }
 
     #[test]
