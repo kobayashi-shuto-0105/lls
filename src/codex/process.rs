@@ -83,7 +83,9 @@ pub fn run_process_with_timeout(
     // Spawn a thread to wait for the child process
     thread::spawn(move || {
         // Take the child from the mutex
-        let mut guard = child.lock().expect("mutex poisoned");
+        let mut guard = child
+            .lock()
+            .expect("failed to acquire lock on subprocess handle during wait");
         if let Some(mut c) = guard.take() {
             let status = c.wait();
             // Send result; ignore send error if receiver dropped (timeout case)
@@ -108,7 +110,9 @@ pub fn run_process_with_timeout(
         }
         Err(mpsc::RecvTimeoutError::Timeout) => {
             // Timeout reached - kill the child process to prevent resource leaks
-            let mut guard = child_for_timeout.lock().expect("mutex poisoned");
+            let mut guard = child_for_timeout
+                .lock()
+                .expect("failed to acquire lock on subprocess handle during timeout cleanup");
             if let Some(mut c) = guard.take() {
                 // Best-effort kill; ignore errors (process may have already exited)
                 let _ = c.kill();
@@ -217,8 +221,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn test_real_process_timeout() {
-        // Use `sleep` command with a duration longer than our timeout
+        // Unix-only: uses `sleep` command which is standard on Unix systems.
+        // Cross-platform timeout tests are tracked in M8-02.
         let result = run_process_with_timeout("sleep", &["10".into()], Duration::from_millis(100));
         assert!(
             matches!(result, Err(ProcessError::Timeout)),
@@ -228,8 +234,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn test_real_process_captures_stderr() {
-        // Use a command that writes to stderr
+        // Unix-only: uses `sh` shell which is standard on Unix systems.
+        // Cross-platform stderr tests are tracked in M8-02.
         let result = run_process_with_timeout(
             "sh",
             &["-c".into(), "echo error >&2".into()],
