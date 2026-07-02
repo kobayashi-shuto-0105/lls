@@ -22,14 +22,8 @@ pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppErro
 
     // Step 1: Verify authentication status (ChatGPT-only policy)
     // This checks for rejected API key env vars and verifies Codex login
-    match check_auth_status(&runner) {
-        Ok(_) => {
-            // Logged in via ChatGPT - proceed
-        }
-        Err(auth_err) => {
-            // Authentication check failed
-            return Err(AppError::Codex(auth_err.guidance));
-        }
+    if let Err(auth_err) = check_auth_status(&runner) {
+        return Err(AppError::Codex(auth_err.guidance));
     }
 
     // Step 2: Build the exec request
