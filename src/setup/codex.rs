@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::codex::{ProcessError, ProcessRequest, ProcessRunner};
+use crate::codex::{ProcessError, ProcessRequest, ProcessRunner, run_process_with_timeout};
 use crate::config::validate_config;
 use crate::error::AppError;
 
@@ -73,34 +73,22 @@ fn map_codex_error(err: ProcessError) -> AppError {
     }
 }
 
-/// Production Codex runner using `std::process::Command`.
+/// Production Codex runner using `std::process::Command` with timeout support.
 struct RealCodexRunner;
 
 impl ProcessRunner for RealCodexRunner {
     fn run(&self, request: ProcessRequest) -> Result<crate::codex::ProcessResult, ProcessError> {
-        let mut cmd = std::process::Command::new(&request.command);
-        cmd.args(&request.args);
+        let result = run_process_with_timeout(&request.command, &request.args, request.timeout)?;
 
-        let output = cmd.output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                ProcessError::NotFound
-            } else {
-                ProcessError::Io(e.to_string())
-            }
-        })?;
-
-        if !output.status.success() {
+        // For Codex, non-zero exit is an error
+        if result.exit_code != 0 {
             return Err(ProcessError::NonZeroExit {
-                code: output.status.code().unwrap_or(-1),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                code: result.exit_code,
+                stderr: result.stderr,
             });
         }
 
-        Ok(crate::codex::ProcessResult {
-            exit_code: output.status.code().unwrap_or(0),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        })
+        Ok(result)
     }
 }
 
@@ -195,6 +183,13 @@ mod tests {
     }
 
     #[test]
+    fn test_map_codex_timeout_exit_code() {
+        // Verify that timeout maps to exit code 6
+        let err = map_codex_error(crate::codex::ProcessError::Timeout);
+        assert_eq!(err.exit_code(), 6, "Timeout should map to exit code 6");
+    }
+
+    #[test]
     fn test_fake_codex_runner_integration() {
         // Fake runner simulates successful Codex
         let runner = crate::codex::FakeProcessRunner::new(Ok(crate::codex::ProcessResult {
@@ -226,5 +221,24 @@ mod tests {
         };
         let result = runner.run(request);
         assert!(matches!(result, Err(crate::codex::ProcessError::NotFound)));
+    }
+
+    #[test]
+    fn test_fake_codex_runner_timeout() {
+        // Fake runner simulates timeout
+        let runner = crate::codex::FakeProcessRunner::new(Err(crate::codex::ProcessError::Timeout));
+        let request = ProcessRequest {
+            command: "codex".into(),
+            args: vec![],
+            timeout: Duration::from_secs(1),
+        };
+        let result = runner.run(request);
+        assert!(matches!(result, Err(crate::codex::ProcessError::Timeout)));
+
+        // Verify that mapped error has correct exit code
+        if let Err(e) = result {
+            let app_err = map_codex_error(e);
+            assert_eq!(app_err.exit_code(), 6);
+        }
     }
 }
