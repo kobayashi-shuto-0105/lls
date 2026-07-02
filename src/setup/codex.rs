@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use crate::codex::run_process_with_timeout;
 use crate::codex::{
-    ProcessError, ProcessRequest, ProcessRunner, cleanup_schema_temp_file, write_schema_temp_file,
+    ProcessError, ProcessRequest, ProcessRunner, RealProcessRunner, check_auth_status,
+    cleanup_schema_temp_file, write_schema_temp_file,
 };
 use crate::config::validate_config;
 use crate::error::AppError;
@@ -17,7 +18,14 @@ pub struct ValidatedCodexOutput {
 }
 
 /// Run Codex-assisted setup and return the raw JSON output.
+///
+/// This function verifies ChatGPT login status before running `codex exec`.
 pub fn run_codex_setup(project_root: &std::path::Path) -> Result<String, AppError> {
+    let auth_runner = RealProcessRunner;
+    if let Err(auth_err) = check_auth_status(&auth_runner) {
+        return Err(AppError::Codex(auth_err.guidance));
+    }
+
     let runner = RealCodexRunner;
 
     // Write embedded schema to a temporary file

@@ -125,6 +125,16 @@
 
 新しいentryは上へ追加する。
 
+### 2026-07-02 — ChatGPT-only authentication policy enforcement (Issue #15)
+
+- Added `src/codex/auth.rs` module with authentication status adapter
+- Implemented `check_auth_status()` using `codex login status` before running `codex exec`
+- Enforced ChatGPT-only setup flow through Codex CLI status parsing without reading credential files or API-key environment variables
+- Updated `run_codex_setup()` to stop early with login guidance when no ChatGPT session is available
+- Added user guidance for `codex login` and `codex login --device-auth`
+- Added unit tests for authentication status parsing and unsupported-auth handling
+- Closes #15
+
 ### 2026-07-02 — Codex subprocess timeout implementation
 
 - Implemented timeout enforcement in `src/codex/process.rs` using thread-based wait with channel timeout
