@@ -19,7 +19,7 @@
 
 - H-01: `clap_complete`による5シェル補完生成 完了
 - H-02: Release配布物への補完同梱、SHA-256生成、内容検査 完了
-- H-03: `homebrew-tap`作成とFormula公開 未着手（Release公開後にSHA-256を確定）
+- H-03: `homebrew-tap`作成とFormula公開 完了
 
 実装状況:
 
@@ -73,7 +73,7 @@
 | M8-04 | not_started | - | coverage/release gate |
 | H-01 | done | codex/homebrew-distribution | shell completion generation |
 | H-02 | done | codex/homebrew-distribution | release assets and checksums |
-| H-03 | not_started | - | Homebrew tap and formula |
+| H-03 | done | codex/homebrew-tap-docs | Homebrew tap and formula |
 
 ---
 
@@ -140,7 +140,7 @@
 - Added unit and binary E2E coverage for completion generation
 - Fixed the release workflow's `container_image` self-dependency
 - Added completion files, SHA-256 sidecars, and archive-content verification to release assets
-- Remaining: create `kobayashi-shuto-0105/homebrew-tap` after a Release exists, then fill Formula checksums from the published assets
+- Completed: created `kobayashi-shuto-0105/homebrew-tap` and published the v0.1.0 Formula with checksums from the release assets
 
 ### 2026-07-02 — ChatGPT-only authentication policy enforcement (Issue #15)
 

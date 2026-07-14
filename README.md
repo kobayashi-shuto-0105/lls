@@ -34,6 +34,21 @@
 
 `lls` はこの問題に対して、意味付きで優先度のある一覧を返すことで対応します。
 
+## Installation
+
+Homebrew tapからインストールできます。
+
+```bash
+brew tap kobayashi-shuto-0105/tap
+brew install lls
+```
+
+または、tapを明示して直接インストールできます。
+
+```bash
+brew install kobayashi-shuto-0105/tap/lls
+```
+
 ## What `lls` Tries To Return
 
 想定している出力の方向性は次のとおりです。
