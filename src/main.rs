@@ -59,6 +59,16 @@ fn run(args: CliArgs) -> Result<(), AppError> {
     match request {
         CommandRequest::List(list_req) => run_list(list_req),
         CommandRequest::Setup(setup_req) => run_setup(setup_req),
+        CommandRequest::Completions(completions_req) => {
+            lls::completion::generate(&completions_req.out_dir).map_err(|error| {
+                AppError::Runtime(format!("failed to generate completion files: {error}"))
+            })?;
+            eprintln!(
+                "lls: completion files written to {}",
+                completions_req.out_dir.display()
+            );
+            Ok(())
+        }
     }
 }
 fn run_list(req: app::ListRequest) -> Result<(), AppError> {

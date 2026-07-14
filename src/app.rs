@@ -6,6 +6,7 @@ use crate::error::AppError;
 pub enum CommandRequest {
     List(ListRequest),
     Setup(SetupRequest),
+    Completions(CompletionsRequest),
 }
 
 #[derive(Debug)]
@@ -39,6 +40,11 @@ pub struct SetupRequest {
     pub path: String,
 }
 
+#[derive(Debug)]
+pub struct CompletionsRequest {
+    pub out_dir: std::path::PathBuf,
+}
+
 /// Converts parsed CLI args into a validated command request.
 pub fn parse_request(args: CliArgs) -> Result<CommandRequest, AppError> {
     args.validate().map_err(AppError::Cli)?;
@@ -65,6 +71,9 @@ pub fn parse_request(args: CliArgs) -> Result<CommandRequest, AppError> {
                 without_codex,
                 path: args.path.to_string_lossy().into(),
             })),
+            CliCommand::Completions { out_dir } => {
+                Ok(CommandRequest::Completions(CompletionsRequest { out_dir }))
+            }
         };
     }
 
@@ -129,6 +138,19 @@ mod tests {
                 assert!(matches!(l.config_source, ConfigSource::None));
             }
             _ => panic!("expected List"),
+        }
+    }
+
+    #[test]
+    fn test_completions_request() {
+        let args = CliArgs::try_parse_from(["lls", "completions"]).unwrap();
+        let req = parse_request(args).unwrap();
+
+        match req {
+            CommandRequest::Completions(completions) => {
+                assert_eq!(completions.out_dir, std::path::PathBuf::from("completions"));
+            }
+            _ => panic!("expected Completions"),
         }
     }
 }

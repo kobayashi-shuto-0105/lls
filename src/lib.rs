@@ -2,6 +2,7 @@ pub mod app;
 pub mod classifier;
 pub mod cli;
 pub mod codex;
+pub mod completion;
 pub mod config;
 pub mod error;
 pub mod model;

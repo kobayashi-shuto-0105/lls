@@ -57,6 +57,13 @@ pub enum CliCommand {
         #[arg(long)]
         without_codex: bool,
     },
+
+    /// Generate shell completion files
+    Completions {
+        /// Output directory
+        #[arg(long, default_value = "completions")]
+        out_dir: PathBuf,
+    },
 }
 
 /// Sort order for entries.
@@ -160,6 +167,19 @@ mod tests {
                 assert!(*without_codex);
             }
             _ => panic!("expected Setup subcommand"),
+        }
+    }
+
+    #[test]
+    fn test_completions_subcommand() {
+        let args = CliArgs::try_parse_from(["lls", "completions", "--out-dir", "dist/completions"])
+            .unwrap();
+
+        match args.command {
+            Some(CliCommand::Completions { out_dir }) => {
+                assert_eq!(out_dir, PathBuf::from("dist/completions"));
+            }
+            _ => panic!("expected Completions subcommand"),
         }
     }
 
