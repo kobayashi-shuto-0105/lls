@@ -37,12 +37,6 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "action@github.com"
 
-          # submodule を使っている場合、checkout 直後は submodule が未初期化のことがある。
-          # 依存しているならここで確実に揃える（このリポジトリで不要なら将来的に削除可能）。
-          auth_header="$(git config --local --get http.https://github.com/.extraheader)"
-          git submodule sync --recursive
-          git -c "http.extraheader=$auth_header" -c protocol.version=2 submodule update --init --force --recursive --depth=1
-
       - name: update version
         id: update_version
         run: |
