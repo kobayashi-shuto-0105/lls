@@ -35,3 +35,34 @@ fn test_help() {
         .expect("failed to run lls");
     assert!(output.status.success());
 }
+
+#[test]
+fn test_completions_subcommand_generates_all_shell_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let output_dir = dir.path().join("generated-completions");
+    let output = Command::new(lls_binary())
+        .args([
+            "completions",
+            "--out-dir",
+            output_dir.to_str().expect("temporary path should be UTF-8"),
+        ])
+        .output()
+        .expect("failed to run lls");
+
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("completion files written"));
+
+    for relative_path in [
+        "bash/lls",
+        "zsh/_lls",
+        "fish/lls",
+        "powershell/lls.ps1",
+        "elvish/lls",
+    ] {
+        assert!(
+            output_dir.join(relative_path).is_file(),
+            "missing completion file: {relative_path}"
+        );
+    }
+}

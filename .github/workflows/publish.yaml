@@ -134,6 +134,9 @@ jobs:
           # zigbuild を使って、クロスコンパイルする。
           cargo zigbuild --release --target ${{ matrix.target }}
 
+      - name: Generate shell completions
+        run: cargo run -- completions --out-dir completions
+
       - name: Create distribution files.
         run: |
           # 配布用のファイルを作成する。
@@ -143,7 +146,33 @@ jobs:
           # バイナリ本体 + README/LICENSE を同梱して tar.gz にする。
           cp target/${{ matrix.target }}/release/${{ needs.setup.outputs.appname }}${{ matrix.ext }} dist/$ASSET_NAME/
           cp README.md LICENSE dist/$ASSET_NAME/
+          cp -R completions dist/$ASSET_NAME/
           tar cvfz dist/${ASSET_NAME}.tar.gz -C dist $ASSET_NAME
+
+      - name: Verify distribution contents
+        run: |
+          ASSET_NAME=${{ needs.setup.outputs.appname }}-${{ needs.setup.outputs.tag}}_${{ matrix.architecture }}_${{ matrix.os_name }}
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/lls"
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/completions/bash/lls"
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/completions/zsh/_lls"
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/completions/fish/lls"
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/completions/powershell/lls.ps1"
+          tar tzf "dist/${ASSET_NAME}.tar.gz" | grep -Fx "${ASSET_NAME}/completions/elvish/lls"
+
+      - name: Generate checksum
+        run: |
+          ASSET_NAME=${{ needs.setup.outputs.appname }}-${{ needs.setup.outputs.tag}}_${{ matrix.architecture }}_${{ matrix.os_name }}
+          python3 - <<PY
+          import hashlib
+          from pathlib import Path
+
+          path = Path("dist/${ASSET_NAME}.tar.gz")
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          Path(str(path) + ".sha256").write_text(
+              f"{digest}  {path.name}\n",
+              encoding="utf-8",
+          )
+          PY
 
       - name: Upload assets
         env:
@@ -152,14 +181,17 @@ jobs:
           # gh コマンドを使って、リリースにアセットをアップロードする。
           # この時点では Release は draft なので、外部からはまだ見えない（想定）。
           ASSET_NAME=${{ needs.setup.outputs.appname }}-${{ needs.setup.outputs.tag}}_${{ matrix.architecture }}_${{ matrix.os_name }}
-          gh release upload v${{ needs.setup.outputs.tag }} dist/${ASSET_NAME}.tar.gz
+          gh release upload \
+            v${{ needs.setup.outputs.tag }} \
+            "dist/${ASSET_NAME}.tar.gz" \
+            "dist/${ASSET_NAME}.tar.gz.sha256"
 
   container_image:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    needs: [publish, container_image]
+    needs: [publish]
     steps:
       - name: Setup just
         uses: extractions/setup-just@v4

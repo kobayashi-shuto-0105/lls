@@ -75,6 +75,23 @@ cargo build --release
 cargo install lls
 ```
 
+### Homebrew
+
+GitHub Release の公開後は、Homebrew tap からインストールできます。
+
+```bash
+brew install kobayashi-shuto-0105/tap/lls
+```
+
+更新・削除:
+
+```bash
+brew upgrade kobayashi-shuto-0105/tap/lls
+brew uninstall lls
+```
+
+Homebrew 版には Bash、Zsh、Fish の補完ファイルが含まれます。インストール後にシェルを再起動すると、`lls --sort` などで候補を利用できます。
+
 ## Docker
 
 ランタイムイメージは [`Containerfile`](Containerfile) で `dhi.io/debian-base:trixie` を使います。  
