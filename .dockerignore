@@ -1,5 +1,7 @@
 .git
-.github
+.github/workflows
+.github/scripts
+.github/templates
 target
 docs/public
 .lls
