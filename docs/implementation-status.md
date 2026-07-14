@@ -73,7 +73,7 @@
 | M8-04 | not_started | - | coverage/release gate |
 | H-01 | done | codex/homebrew-distribution | shell completion generation |
 | H-02 | done | codex/homebrew-distribution | release assets and checksums |
-| H-03 | done | codex/homebrew-tap-docs | Homebrew tap and formula |
+| H-03 | done | #24 | Homebrew tap and formula |
 
 ---
 
