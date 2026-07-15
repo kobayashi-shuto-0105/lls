@@ -17,6 +17,9 @@
   <a href="https://github.com/kobayashi-shuto-0105/lls/releases/tag/v${VERSION}">
     <img src="https://img.shields.io/badge/Version-${VERSION}-blue.svg" alt="Version">
   </a>
+  <a href="https://doi.org/10.5281/zenodo.21357700">
+    <img src="https://zenodo.org/badge/1206599798.svg" alt="DOI">
+  </a>
 </p>
 
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  
@@ -33,6 +36,21 @@
 - どこから読めば全体像をつかみやすいか
 
 `lls` はこの問題に対して、意味付きで優先度のある一覧を返すことで対応します。
+
+## Installation
+
+Homebrew tapからインストールできます。
+
+```bash
+brew tap kobayashi-shuto-0105/tap
+brew install lls
+```
+
+または、tapを明示して直接インストールできます。
+
+```bash
+brew install kobayashi-shuto-0105/tap/lls
+```
 
 ## What `lls` Tries To Return
 

@@ -13,13 +13,14 @@
 - **Next task:** M8-02 — Cross-platform behavior
 - **MVP implementation:** substantially complete (M0-M7 done, M8 hardening in progress)
 - **Blocking issues:** none
-- **Last updated:** 2026-07-14
+- **Last updated:** 2026-07-15
 
 配布トラック:
 
 - H-01: `clap_complete`による5シェル補完生成 完了
 - H-02: Release配布物への補完同梱、SHA-256生成、内容検査 完了
 - H-03: `homebrew-tap`作成とFormula公開 完了
+- H-04: 引用メタデータとZenodo DOI連携 完了
 
 実装状況:
 
@@ -74,6 +75,7 @@
 | H-01 | done | codex/homebrew-distribution | shell completion generation |
 | H-02 | done | codex/homebrew-distribution | release assets and checksums |
 | H-03 | done | #24 | Homebrew tap and formula |
+| H-04 | done | #25 | CITATION.cff and Zenodo DOI integration |
 
 ---
 
@@ -133,6 +135,13 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-07-15 — Citation metadata and Zenodo preparation
+
+- Added root-level `CITATION.cff` with author, license, version, and repository metadata
+- Updated `.github/scripts/update_version.sh` so future release branches keep `CITATION.cff` in sync
+- Confirmed the release workflow's `container_image` dependency is already fixed
+- Completed: enabled `kobayashi-shuto-0105/lls` in Zenodo and added the v0.1.0 DOI to `README.md` and `CITATION.cff`
 
 ### 2026-07-14 — Homebrew distribution foundation
 
