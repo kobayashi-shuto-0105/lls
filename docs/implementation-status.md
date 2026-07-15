@@ -20,6 +20,7 @@
 - H-01: `clap_complete`による5シェル補完生成 完了
 - H-02: Release配布物への補完同梱、SHA-256生成、内容検査 完了
 - H-03: `homebrew-tap`作成とFormula公開 完了
+- H-04: 引用メタデータとZenodo DOI連携 進行中（Zenodo側の有効化待ち）
 
 実装状況:
 
@@ -74,6 +75,7 @@
 | H-01 | done | codex/homebrew-distribution | shell completion generation |
 | H-02 | done | codex/homebrew-distribution | release assets and checksums |
 | H-03 | done | #24 | Homebrew tap and formula |
+| H-04 | in_progress | codex/citation-metadata | CITATION.cff and Zenodo DOI integration |
 
 ---
 
@@ -133,6 +135,13 @@
 ## 6. Handoff log
 
 新しいentryは上へ追加する。
+
+### 2026-07-15 — Citation metadata and Zenodo preparation
+
+- Added root-level `CITATION.cff` with author, license, version, and repository metadata
+- Updated `.github/scripts/update_version.sh` so future release branches keep `CITATION.cff` in sync
+- Confirmed the release workflow's `container_image` dependency is already fixed
+- Remaining: enable `kobayashi-shuto-0105/lls` in Zenodo, publish a new release, then add the issued DOI to `README.md` and `CITATION.cff`
 
 ### 2026-07-14 — Homebrew distribution foundation
 

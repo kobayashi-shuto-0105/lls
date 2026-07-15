@@ -9,6 +9,7 @@
 # 更新対象:
 # - `Cargo.toml` の `version = "..."` 行
 # - `.github/templates/README.md` の `${VERSION}` プレースホルダ → `README.md` を生成
+# - `CITATION.cff` の `version` 行
 #
 # NOTE:
 # - `README.md` を直接編集するのではなく、テンプレートから生成する形にしておくと
@@ -31,3 +32,8 @@ tmp="$(mktemp)"
 # README テンプレート内の `${VERSION}` を置換して、README.md を生成する。
 sed "s/\${VERSION}/${TO_VERSION}/g" .github/templates/README.md > "${tmp}"
 mv "${tmp}" README.md
+
+tmp="$(mktemp)"
+# GitHubの引用情報にもリリース対象のバージョンを反映する。
+sed "s/^version: .*/version: \"${TO_VERSION}\"/" CITATION.cff > "${tmp}"
+mv "${tmp}" CITATION.cff
