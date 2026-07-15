@@ -5,5 +5,7 @@ authors:
     given-names: "Shuto"
 title: "lls: ls for LLMs"
 version: "0.1.0"
+doi: "10.5281/zenodo.21357701"
+date-released: 2026-07-14
 license: "MIT"
 url: "https://github.com/kobayashi-shuto-0105/lls"

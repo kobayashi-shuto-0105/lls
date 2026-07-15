@@ -17,6 +17,9 @@
   <a href="https://github.com/kobayashi-shuto-0105/lls/releases/tag/v0.1.0">
     <img src="https://img.shields.io/badge/Version-0.1.0-blue.svg" alt="Version">
   </a>
+  <a href="https://doi.org/10.5281/zenodo.21357700">
+    <img src="https://zenodo.org/badge/1206599798.svg" alt="DOI">
+  </a>
 </p>
 
 `lls` は、LLM やエージェントがリポジトリやディレクトリを探索しやすくするための CLI です。  
